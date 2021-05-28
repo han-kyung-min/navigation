@@ -181,7 +181,10 @@ void GlobalPlanner::clearRobotCell(const geometry_msgs::PoseStamped& global_pose
 }
 
 bool GlobalPlanner::makePlanService(nav_msgs::GetPlan::Request& req, nav_msgs::GetPlan::Response& resp) {
-    makePlan(req.start, req.goal, resp.plan.poses);
+
+// this func has nothing to do with moveBasePlanService
+// move base planner service does not use this class
+	makePlan(req.start, req.goal, resp.plan.poses);
 
     resp.plan.header.stamp = ros::Time::now();
     resp.plan.header.frame_id = frame_id_;
@@ -212,6 +215,7 @@ bool GlobalPlanner::worldToMap(double wx, double wy, double& mx, double& my) {
 
 bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geometry_msgs::PoseStamped& goal,
                            std::vector<geometry_msgs::PoseStamped>& plan) {
+//ROS_ERROR("in GlobalPlanner::makePlan() \n");
     return makePlan(start, goal, default_tolerance_, plan);
 }
 
@@ -223,7 +227,7 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
                 "This planner has not been initialized yet, but it is being used, please call initialize() before use");
         return false;
     }
-
+ROS_ERROR("GlobalPlanner::makePlan() is called \n");
     //clear the plan, just in case
     plan.clear();
 
@@ -267,6 +271,7 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
     if (!costmap_->worldToMap(wx, wy, goal_x_i, goal_y_i)) {
         ROS_WARN_THROTTLE(1.0,
                 "The goal sent to the global planner is off the global costmap. Planning will always fail to this goal.");
+        ROS_WARN("The goal is off. planner has failed \n");
         return false;
     }
     if(old_navfn_behavior_){
@@ -276,6 +281,7 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
         worldToMap(wx, wy, goal_x, goal_y);
     }
 
+ROS_WARN("b4 clear robot cell \n");
     //clear the starting cell within the costmap because we know it can't be an obstacle
     clearRobotCell(start, start_x_i, start_y_i);
 
@@ -292,11 +298,14 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
 
     bool found_legal = planner_->calculatePotentials(costmap_->getCharMap(), start_x, start_y, goal_x, goal_y,
                                                     nx * ny * 2, potential_array_);
+ROS_WARN("found legal: %d \n", found_legal);
 
     if(!old_navfn_behavior_)
         planner_->clearEndpoint(costmap_->getCharMap(), potential_array_, goal_x_i, goal_y_i, 2);
     if(publish_potential_)
         publishPotential(potential_array_);
+
+ROS_WARN("publish_potential %d \n", publish_potential_);
 
     if (found_legal) {
         //extract the plan
@@ -311,7 +320,7 @@ bool GlobalPlanner::makePlan(const geometry_msgs::PoseStamped& start, const geom
     }else{
         ROS_ERROR("Failed to get a plan.");
     }
-
+ROS_WARN("is the plan from makePlan() empty: %d \n", plan.empty());
     // add orientations if needed
     orientation_filter_->processPath(start, plan);
 

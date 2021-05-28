@@ -76,7 +76,7 @@ namespace navfn {
       if(visualize_potential_)
         potarr_pub_ = private_nh.advertise<sensor_msgs::PointCloud2>("potential", 1);
 
-      private_nh.param("allow_unknown", allow_unknown_, true);
+      private_nh.param("allow_unknown", allow_unknown_, true); // was true
       private_nh.param("planner_window_x", planner_window_x_, 0.0);
       private_nh.param("planner_window_y", planner_window_y_, 0.0);
       private_nh.param("default_tolerance", default_tolerance_, 0.0);
@@ -174,9 +174,11 @@ namespace navfn {
 
     //set the associated costs in the cost map to be free
     costmap_->setCost(mx, my, costmap_2d::FREE_SPACE);
+    ROS_WARN("\n\n\n\n allow unknown %d\n\n\n\n", allow_unknown_);
   }
 
   bool NavfnROS::makePlanService(nav_msgs::GetPlan::Request& req, nav_msgs::GetPlan::Response& resp){
+      ROS_WARN("navfnROS makePlanService is called \n");
     makePlan(req.start, req.goal, resp.plan.poses);
 
     resp.plan.header.stamp = ros::Time::now();
@@ -202,7 +204,8 @@ namespace navfn {
       ROS_ERROR("This planner has not been initialized yet, but it is being used, please call initialize() before use");
       return false;
     }
-
+ROS_WARN("NavfnROS::makePlan() is called to find a plan from (%f %f) to the goal (%f %f) \n",
+		start.pose.position.x, start.pose.position.y, goal.pose.position.x, goal.pose.position.y );
     //clear the plan, just in case
     plan.clear();
 
@@ -256,12 +259,14 @@ namespace navfn {
     int map_goal[2];
     map_goal[0] = mx;
     map_goal[1] = my;
+//ROS_WARN("wx wy (%f %f) mx my (%u %u) mapstart(%d %d) mapgoal(%d %d):\n",
+//		wx, wy, mx, my, map_start[0], map_start[1], map_goal[0], map_goal[1] );
 
     planner_->setStart(map_goal);
     planner_->setGoal(map_start);
 
-    //bool success = planner_->calcNavFnAstar();
-    planner_->calcNavFnDijkstra(true);
+    bool success = planner_->calcNavFnAstar();
+    //bool success = planner_->calcNavFnDijkstra(true);
 
     double resolution = costmap_->getResolution();
     geometry_msgs::PoseStamped p, best_pose;
@@ -333,7 +338,7 @@ namespace navfn {
       }
       potarr_pub_.publish(cloud);
     }
-
+ROS_WARN("Astar was successful (%d) found a legal plan: (%d) is plan empty: (%d)\n", success, found_legal, plan.empty() );
     //publish the plan for visualization purposes
     publishPlan(plan, 0.0, 1.0, 0.0, 0.0);
 

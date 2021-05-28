@@ -52,6 +52,7 @@ namespace move_base {
     as_(NULL),
     planner_costmap_ros_(NULL), controller_costmap_ros_(NULL),
     bgp_loader_("nav_core", "nav_core::BaseGlobalPlanner"),
+	//bgp_loader_("global_planner", "nav_core::BaseGlobalPlanner"),
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"), 
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
@@ -67,6 +68,7 @@ namespace move_base {
     //get some parameters that will be global to the move base node
     std::string global_planner, local_planner;
     private_nh.param("base_global_planner", global_planner, std::string("navfn/NavfnROS"));
+    //private_nh.param("base_global_planner", global_planner, std::string("global_planner::GlobalPlanner"));
     private_nh.param("base_local_planner", local_planner, std::string("base_local_planner/TrajectoryPlannerROS"));
     private_nh.param("global_costmap/robot_base_frame", robot_base_frame_, std::string("base_link"));
     private_nh.param("global_costmap/global_frame", global_frame_, std::string("map"));
@@ -82,6 +84,7 @@ namespace move_base {
     // parameters of make_plan service
     private_nh.param("make_plan_clear_costmap", make_plan_clear_costmap_, true);
     private_nh.param("make_plan_add_unreachable_goal", make_plan_add_unreachable_goal_, true);
+    private_nh.param("max_plan_length", max_plan_length_, 1000);		// by hkm
 
     //set up plan triple buffer
     planner_plan_ = new std::vector<geometry_msgs::PoseStamped>();
@@ -94,6 +97,8 @@ namespace move_base {
     //for commanding the base
     vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
     current_goal_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("current_goal", 0 );
+    recompute_paths_to_frontiers_pub_ = nh.advertise<std_msgs::Bool>("reset_paths_to_frontiers", 1);
+    unreachable_frontier_pub_		  = nh.advertise<geometry_msgs::PoseStamped>("unreachable_frontier", 1);
 
     ros::NodeHandle action_nh("move_base");
     action_goal_pub_ = action_nh.advertise<move_base_msgs::MoveBaseActionGoal>("goal", 1);
@@ -158,6 +163,9 @@ namespace move_base {
       controller_costmap_ros_->stop();
     }
 
+//ROS_WARN("local costmap_size: %d %d \n", controller_costmap_ros_->getCostmap()->getSizeInCellsX(), controller_costmap_ros_->getCostmap()->getSizeInCellsY() );
+//ROS_WARN("global costmap_size: %d %d \n", planner_costmap_ros_->getCostmap()->getSizeInCellsX(), planner_costmap_ros_->getCostmap()->getSizeInCellsY() );
+
     //load any user specified recovery behaviors, and if that fails load the defaults
     if(!loadRecoveryBehaviors(private_nh)){
       loadDefaultRecoveryBehaviors();
@@ -175,6 +183,8 @@ namespace move_base {
     dsrv_ = new dynamic_reconfigure::Server<move_base::MoveBaseConfig>(ros::NodeHandle("~"));
     dynamic_reconfigure::Server<move_base::MoveBaseConfig>::CallbackType cb = boost::bind(&MoveBase::reconfigureCB, this, _1, _2);
     dsrv_->setCallback(cb);
+
+    num_replans_to_the_samegoal = 0;
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
@@ -471,7 +481,7 @@ namespace move_base {
 
   bool MoveBase::makePlan(const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan){
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(planner_costmap_ros_->getCostmap()->getMutex()));
-
+ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls navfnROS::makePlan()", goal.pose.position.x, goal.pose.position.y );
     //make sure to set the plan to be empty initially
     plan.clear();
 
@@ -489,13 +499,19 @@ namespace move_base {
     }
 
     const geometry_msgs::PoseStamped& start = global_pose;
-
+ROS_WARN("===== MoveBase::makePlan() start =============================\n");
     //if the planner fails or returns a zero length plan, planning failed
-    if(!planner_->makePlan(start, goal, plan) || plan.empty()){
-      ROS_DEBUG_NAMED("move_base","Failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
+    if(!planner_->makePlan(start, goal, plan) || plan.empty())
+    {
+ROS_WARN("===== MoveBase::makPlan() failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
+      //ROS_DEBUG_NAMED("move_base","Failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
       return false;
     }
-
+//    else if( !isValidPlan(plan) ) // by hkm
+//	{
+//    	return false;
+//	}
+ROS_WARN("===== MoveBase::makePlan() end success  plan found ? (%d) ===\n", !plan.empty());
     return true;
   }
 
@@ -564,12 +580,41 @@ namespace move_base {
     planner_cond_.notify_one();
   }
 
+  bool MoveBase::isValidPlan( std::vector<geometry_msgs::PoseStamped>& plan )
+  {
+
+	  if( plan.size()  > max_plan_length_)
+	  {
+		  ROS_ERROR("This plan (%d) is too expensive... \n", plan.size() );
+		  return false;
+	  }
+
+	  for(size_t idx=0; idx < plan.size(); idx++ )
+	  {
+		  double fx = plan[idx].pose.position.x ;
+		  double fy = plan[idx].pose.position.y ;
+		  unsigned int mx, my;
+		  planner_costmap_ros_->getCostmap()->worldToMap(fx, fy, mx, my) ;
+
+		  unsigned char cost0 = planner_costmap_ros_->getCostmap()->getCost(mx, my);
+
+		  if( cost0 >= 254 )
+		  {
+			  ROS_ERROR(" This plan is invalid \n");
+			  return false;
+		  }
+	  }
+
+	  return true ;
+  }
+
   void MoveBase::planThread(){
     ROS_DEBUG_NAMED("move_base_plan_thread","Starting planner thread...");
     ros::NodeHandle n;
     ros::Timer timer;
     bool wait_for_wake = false;
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+
     while(n.ok()){
       //check if we should run the planner (the mutex is locked)
       while(wait_for_wake || !runPlanner_){
@@ -578,8 +623,9 @@ namespace move_base {
         planner_cond_.wait(lock);
         wait_for_wake = false;
       }
-      ros::Time start_time = ros::Time::now();
 
+      ros::Time start_time = ros::Time::now();
+//ROS_WARN("planThread to goal(%f %f) \n", planner_goal_.pose.position.x, planner_goal_.pose.position.y );
       //time to plan! get a copy of the goal and unlock the mutex
       geometry_msgs::PoseStamped temp_goal = planner_goal_;
       lock.unlock();
@@ -593,6 +639,8 @@ namespace move_base {
         ROS_DEBUG_NAMED("move_base_plan_thread","Got Plan with %zu points!", planner_plan_->size());
         //pointer swap the plans under mutex (the controller will pull from latest_plan_)
         std::vector<geometry_msgs::PoseStamped>* temp_plan = planner_plan_;
+
+ROS_WARN("@MoveBase::planThread  gotPlan (%d) to the temp_goal (%f %f) \n", gotPlan, temp_goal.pose.position.x, temp_goal.pose.position.y );
 
         lock.lock();
         planner_plan_ = latest_plan_;
@@ -608,12 +656,44 @@ namespace move_base {
           state_ = CONTROLLING;
         if(planner_frequency_ <= 0)
           runPlanner_ = false;
+
+        // in case of previous goal == current goal
+        if( planner_goal_equals_to_prevgoal() )
+        {
+    // Probably, we've found a invalid path that passes through an obstacle ( e.g. ) walls )
+      	  num_replans_to_the_samegoal++;
+//ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_replans_to_the_samegoal );
+
+      	  if( num_replans_to_the_samegoal > 2 )
+      	  {
+      		  // Tell FrontierDetector to recompute frontier points and the paths to them
+      		  std_msgs::Bool recompute_flag;
+      		  recompute_flag.data = true ;
+      		  recompute_paths_to_frontiers_pub_.publish(recompute_flag);
+      		  // publish the current pose as an unreachable frontier
+      		  unreachable_frontier_pub_.publish( planner_goal_ );
+
+              state_ = CLEARING;
+              runPlanner_ = false;  //
+              publishZeroVelocity();
+
+      		  num_replans_to_the_samegoal = 0;
+      	  }
+        }
+        else
+        {
+      	  num_replans_to_the_samegoal = 0;
+        }
+        previous_goal_ = planner_goal_ ;
+
         lock.unlock();
       }
       //if we didn't get a plan and we are in the planning state (the robot isn't moving)
       else if(state_==PLANNING){
         ROS_DEBUG_NAMED("move_base_plan_thread","No Plan...");
         ros::Time attempt_end = last_valid_plan_ + ros::Duration(planner_patience_);
+
+ROS_WARN("@MoveBase::planThread failed to find a valid plan. planning retries (%u) \n", planning_retries_ );
 
         //check if we've tried to make a plan for over our time limit or our maximum number of retries
         //issue #496: we stop planning when one of the conditions is true, but if max_planning_retries_

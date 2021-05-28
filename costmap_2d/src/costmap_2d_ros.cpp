@@ -104,6 +104,7 @@ Costmap2DROS::Costmap2DROS(const std::string& name, tf2_ros::Buffer& tf) :
     // The error string will accumulate and errors will typically be the same, so the last
     // will do for the warning above. Reset the string here to avoid accumulation.
     tf_error.clear();
+
   }
 
   // check if we want a rolling window version of the costmap
@@ -174,6 +175,7 @@ Costmap2DROS::Costmap2DROS(const std::string& name, tf2_ros::Buffer& tf) :
   dsrv_ = new dynamic_reconfigure::Server<Costmap2DConfig>(ros::NodeHandle("~/" + name));
   dynamic_reconfigure::Server<Costmap2DConfig>::CallbackType cb = boost::bind(&Costmap2DROS::reconfigureCB, this, _1,
                                                                               _2);
+
   dsrv_->setCallback(cb);
 }
 

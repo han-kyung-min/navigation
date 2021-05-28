@@ -494,7 +494,7 @@ namespace base_local_planner{
       goal_map_.resetPathDist();
 
       //make sure that we update our path based on the global plan and compute costs
-      path_map_.setTargetCells(costmap_, global_plan_);
+      path_map_.setTargetCells(costmap_, global_plan_); // costmap_ is the local costmap ( tc_ )
       goal_map_.setLocalGoal(costmap_, global_plan_);
       ROS_DEBUG("Path/Goal distance computed");
     }
@@ -534,7 +534,7 @@ namespace base_local_planner{
    * create the trajectories we wish to score
    */
   Trajectory TrajectoryPlanner::createTrajectories(double x, double y, double theta,
-      double vx, double vy, double vtheta,
+      double vx, double vy, double vtheta,				// curr vel of the robot
       double acc_x, double acc_y, double acc_theta) {
     //compute feasible velocity limits in robot space
     double max_vel_x = max_vel_x_, max_vel_theta;
@@ -586,7 +586,7 @@ namespace base_local_planner{
       //loop through all x velocities
       for(int i = 0; i < vx_samples_; ++i) {
         vtheta_samp = 0;
-        //first sample the straight trajectory
+        //first sample the straight trajectory testing for (vx_samp, vtheta_samp) sample pairs
         generateTrajectory(x, y, theta, vx, vy, vtheta, vx_samp, vy_samp, vtheta_samp,
             acc_x, acc_y, acc_theta, impossible_cost, *comp_traj);
 
@@ -926,6 +926,10 @@ namespace base_local_planner{
     for (unsigned int i = 0; i < footprint_list.size(); ++i) {
       path_map_(footprint_list[i].x, footprint_list[i].y).within_robot = true;
     }
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // "costmap_" refers to local costmap. 100x100 size. c.f) the size of global costmap is 2000x2000
+    /////////////////////////////////////////////////////////////////////////////////////////
 
     //make sure that we update our path based on the global plan and compute costs
     path_map_.setTargetCells(costmap_, global_plan_);

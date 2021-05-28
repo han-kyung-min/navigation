@@ -107,7 +107,7 @@ namespace navfn {
   // create nav fn buffers 
   //
 
-  NavFn::NavFn(int xs, int ys)
+  NavFn::NavFn(int xs, int ys) // xs & ys are (global)costmap size
   {  
     // create cell arrays
     costarr = NULL;
@@ -322,18 +322,17 @@ namespace navfn {
 
       // calculate the nav fn and path
       propNavFnAstar(std::max(nx*ny/20,nx+ny));
-
       // path
       int len = calcPath(nx*4);
 
       if (len > 0)			// found plan
       {
-        ROS_DEBUG("[NavFn] Path found, %d steps\n", len);
+        ROS_WARN("[NavFn Astar] Path found, %d steps\n", len);
         return true;
       }
       else
       {
-        ROS_DEBUG("[NavFn] No path found\n");
+        ROS_ERROR("[NavFn Astar] No path found\n");
         return false;
       }
     }
@@ -884,7 +883,7 @@ namespace navfn {
           if (potarr[stc] >= POT_HIGH)
           {
             ROS_DEBUG("[PathCalc] No path found, high potential");
-            //savemap("navfn_highpot");
+            savemap("navfn_highpot");
             return 0;
           }
         }
@@ -909,10 +908,10 @@ namespace navfn {
           float y = (1.0-dy)*y1 + dy*y2; // interpolated y
 
           // show gradients
-          ROS_DEBUG("[Path] %0.2f,%0.2f  %0.2f,%0.2f  %0.2f,%0.2f  %0.2f,%0.2f; final x=%.3f, y=%.3f\n",
-                    gradx[stc], grady[stc], gradx[stc+1], grady[stc+1], 
-                    gradx[stcnx], grady[stcnx], gradx[stcnx+1], grady[stcnx+1],
-                    x, y);
+//          ROS_DEBUG("[Path] %0.2f,%0.2f  %0.2f,%0.2f  %0.2f,%0.2f  %0.2f,%0.2f; final x=%.3f, y=%.3f\n",
+//                    gradx[stc], grady[stc], gradx[stc+1], grady[stc+1],
+//                    gradx[stcnx], grady[stcnx], gradx[stcnx+1], grady[stcnx+1],
+//                    x, y);
 
           // check for zero gradient, failed
           if (x == 0.0 && y == 0.0)

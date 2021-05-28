@@ -59,6 +59,8 @@
 #include <dynamic_reconfigure/server.h>
 #include "move_base/MoveBaseConfig.h"
 
+#include <std_msgs/Bool.h>
+
 namespace move_base {
   //typedefs to help us out with the action server so that we don't hace to type so much
   typedef actionlib::SimpleActionServer<move_base_msgs::MoveBaseAction> MoveBaseActionServer;
@@ -168,11 +170,12 @@ namespace move_base {
       double distance(const geometry_msgs::PoseStamped& p1, const geometry_msgs::PoseStamped& p2);
 
       geometry_msgs::PoseStamped goalToGlobalFrame(const geometry_msgs::PoseStamped& goal_pose_msg);
-
       /**
        * @brief This is used to wake the planner at periodic intervals.
        */
       void wakePlanner(const ros::TimerEvent& event);
+
+      bool isValidPlan( std::vector<geometry_msgs::PoseStamped>& plan );
 
       tf2_ros::Buffer& tf_;
 
@@ -191,13 +194,14 @@ namespace move_base {
       double planner_frequency_, controller_frequency_, inscribed_radius_, circumscribed_radius_;
       double planner_patience_, controller_patience_;
       int32_t max_planning_retries_;
-      uint32_t planning_retries_;
+      uint32_t planning_retries_, num_replans_to_the_samegoal;
       double conservative_reset_dist_, clearing_radius_;
-      ros::Publisher current_goal_pub_, vel_pub_, action_goal_pub_;
+      ros::Publisher current_goal_pub_, vel_pub_, action_goal_pub_, recompute_paths_to_frontiers_pub_, unreachable_frontier_pub_;
       ros::Subscriber goal_sub_;
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;
       bool make_plan_clear_costmap_, make_plan_add_unreachable_goal_;
+      int  max_plan_length_ ;
       double oscillation_timeout_, oscillation_distance_;
 
       MoveBaseState state_;
@@ -218,9 +222,8 @@ namespace move_base {
       bool runPlanner_;
       boost::recursive_mutex planner_mutex_;
       boost::condition_variable_any planner_cond_;
-      geometry_msgs::PoseStamped planner_goal_;
+      geometry_msgs::PoseStamped planner_goal_, previous_goal_; // prev goal added by hkm
       boost::thread* planner_thread_;
-
 
       boost::recursive_mutex configuration_mutex_;
       dynamic_reconfigure::Server<move_base::MoveBaseConfig> *dsrv_;
@@ -231,6 +234,21 @@ namespace move_base {
       move_base::MoveBaseConfig default_config_;
       bool setup_, p_freq_change_, c_freq_change_;
       bool new_global_plan_;
+
+    public:
+
+      inline bool planner_goal_equals_to_prevgoal( )
+      {
+    	  ROS_WARN("prev/curr goal (%f %f), (%f %f) \n",
+    			  previous_goal_.pose.position.x, previous_goal_.pose.position.y,
+				  planner_goal_.pose.position.x, planner_goal_.pose.position.y
+    	  );
+
+    	  float fxdiff = (previous_goal_.pose.position.x - planner_goal_.pose.position.x) ;
+    	  float fydiff = (previous_goal_.pose.position.y - planner_goal_.pose.position.y) ;
+    	  return std::sqrt( fxdiff * fxdiff + fydiff * fydiff ) < 0.001 ? true : false;
+      }
+
   };
 };
 #endif
