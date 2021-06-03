@@ -174,7 +174,7 @@ namespace navfn {
 
     //set the associated costs in the cost map to be free
     costmap_->setCost(mx, my, costmap_2d::FREE_SPACE);
-    ROS_WARN("\n\n\n\n allow unknown %d\n\n\n\n", allow_unknown_);
+    //ROS_WARN("\n\n\n\n allow unknown %d\n\n\n\n", allow_unknown_);
   }
 
   bool NavfnROS::makePlanService(nav_msgs::GetPlan::Request& req, nav_msgs::GetPlan::Response& resp){
@@ -239,6 +239,7 @@ ROS_WARN("NavfnROS::makePlan() is called to find a plan from (%f %f) to the goal
     //make sure to resize the underlying array that Navfn uses
     planner_->setNavArr(costmap_->getSizeInCellsX(), costmap_->getSizeInCellsY());
     planner_->setCostmap(costmap_->getCharMap(), true, allow_unknown_);
+//costmap_->saveMap("/home/hankm/catkin_ws/src/frontier_detector/launch/cstmap.dat");
 
     int map_start[2];
     map_start[0] = mx;
@@ -338,7 +339,7 @@ ROS_WARN("NavfnROS::makePlan() is called to find a plan from (%f %f) to the goal
       }
       potarr_pub_.publish(cloud);
     }
-ROS_WARN("Astar was successful (%d) found a legal plan: (%d) is plan empty: (%d)\n", success, found_legal, plan.empty() );
+//ROS_WARN("Astar was successful (%d) found a legal plan: (%d) is plan empty: (%d)\n", success, found_legal, plan.empty() );
     //publish the plan for visualization purposes
     publishPlan(plan, 0.0, 1.0, 0.0, 0.0);
 

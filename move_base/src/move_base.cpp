@@ -56,7 +56,8 @@ namespace move_base {
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"), 
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
-    runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
+    runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false), isdone(false)
+  {
 
     as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base", boost::bind(&MoveBase::executeCb, this, _1), false);
 
@@ -108,6 +109,7 @@ namespace move_base {
     //like nav_view and rviz
     ros::NodeHandle simple_nh("move_base_simple");
     goal_sub_ = simple_nh.subscribe<geometry_msgs::PoseStamped>("goal", 1, boost::bind(&MoveBase::goalCB, this, _1));
+    done_sub_ = simple_nh.subscribe("mapping_is_done", 1, &MoveBase::ismappingdoneCB, this );
 
     //we'll assume the radius of the robot to be consistent with what's specified for the costmaps
     private_nh.param("local_costmap/inscribed_radius", inscribed_radius_, 0.325);
@@ -168,6 +170,7 @@ namespace move_base {
 
     //load any user specified recovery behaviors, and if that fails load the defaults
     if(!loadRecoveryBehaviors(private_nh)){
+    	ROS_WARN("Loading default recovery behaviors \n");
       loadDefaultRecoveryBehaviors();
     }
 
@@ -393,6 +396,7 @@ namespace move_base {
       ROS_DEBUG_NAMED("move_base","Failed to find a plan to exact goal of (%.2f, %.2f), searching for a feasible goal within tolerance", 
           req.goal.pose.position.x, req.goal.pose.position.y);
 
+      ROS_WARN("move_base failed to find a plan to exact goal of (%.2f, %.2f)", req.goal.pose.position.x, req.goal.pose.position.y);
       //search outwards for a feasible goal within the specified tolerance
       geometry_msgs::PoseStamped p;
       p = req.goal;
@@ -499,11 +503,11 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
     }
 
     const geometry_msgs::PoseStamped& start = global_pose;
-ROS_WARN("===== MoveBase::makePlan() start =============================\n");
+//ROS_WARN("===== MoveBase::makePlan() start =============================\n");
     //if the planner fails or returns a zero length plan, planning failed
     if(!planner_->makePlan(start, goal, plan) || plan.empty())
     {
-ROS_WARN("===== MoveBase::makPlan() failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
+//ROS_WARN("===== MoveBase::makPlan() failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
       //ROS_DEBUG_NAMED("move_base","Failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
       return false;
     }
@@ -511,7 +515,7 @@ ROS_WARN("===== MoveBase::makPlan() failed to find a  plan to point (%.2f, %.2f)
 //	{
 //    	return false;
 //	}
-ROS_WARN("===== MoveBase::makePlan() end success  plan found ? (%d) ===\n", !plan.empty());
+//ROS_WARN("===== MoveBase::makePlan() end success  plan found ? (%d) ===\n", !plan.empty());
     return true;
   }
 
@@ -662,7 +666,7 @@ ROS_WARN("@MoveBase::planThread  gotPlan (%d) to the temp_goal (%f %f) \n", gotP
         {
     // Probably, we've found a invalid path that passes through an obstacle ( e.g. ) walls )
       	  num_replans_to_the_samegoal++;
-//ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_replans_to_the_samegoal );
+ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_replans_to_the_samegoal );
 
       	  if( num_replans_to_the_samegoal > 2 )
       	  {
@@ -673,7 +677,7 @@ ROS_WARN("@MoveBase::planThread  gotPlan (%d) to the temp_goal (%f %f) \n", gotP
       		  // publish the current pose as an unreachable frontier
       		  unreachable_frontier_pub_.publish( planner_goal_ );
 
-              state_ = CLEARING;
+              state_ = PLANNING;
               runPlanner_ = false;  //
               publishZeroVelocity();
 
@@ -1267,4 +1271,16 @@ ROS_WARN("@MoveBase::planThread failed to find a valid plan. planning retries (%
 
     return true;
   }
+
+
+  void MoveBase::ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone)
+  {
+	  ROS_WARN("mapping done message has received \n");
+	  if( ismappingdone->data )
+	  {
+		  publishZeroVelocity();
+		  isdone = true;
+	  }
+  }
+
 };

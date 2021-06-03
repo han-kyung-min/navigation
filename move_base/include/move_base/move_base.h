@@ -197,10 +197,12 @@ namespace move_base {
       uint32_t planning_retries_, num_replans_to_the_samegoal;
       double conservative_reset_dist_, clearing_radius_;
       ros::Publisher current_goal_pub_, vel_pub_, action_goal_pub_, recompute_paths_to_frontiers_pub_, unreachable_frontier_pub_;
-      ros::Subscriber goal_sub_;
+      ros::Subscriber goal_sub_, done_sub_;
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;
       bool make_plan_clear_costmap_, make_plan_add_unreachable_goal_;
+      bool isdone;
+
       int  max_plan_length_ ;
       double oscillation_timeout_, oscillation_distance_;
 
@@ -249,6 +251,8 @@ namespace move_base {
     	  return std::sqrt( fxdiff * fxdiff + fydiff * fydiff ) < 0.001 ? true : false;
       }
 
+      bool isDone(){ return isdone; };
+      void ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone) ;
   };
 };
 #endif

@@ -38,7 +38,16 @@ int main(int argc, char** argv){
   move_base::MoveBase move_base( buffer );
 
   //ros::MultiThreadedSpinner s;
-  ros::spin();
+  //ros::spin();
+
+
+  while(ros::ok() && !move_base.isDone() )
+  {
+	ros::spinOnce();
+  }
+
+  ROS_WARN("shutting down move_base_node \n");
+  ros::shutdown();
 
   return(0);
 }

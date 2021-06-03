@@ -183,6 +183,18 @@ namespace navfn {
       start[0] = g[0];
       start[1] = g[1];
       ROS_DEBUG("[NavFn] Setting start to %d,%d\n", start[0], start[1]);
+
+      // reset cost arround the goal (by hkm)
+//      COSTTYPE *cm = costarr;
+//      cm[ g[0] + g[1]*nx ] = 0 ;
+//
+//      for(int r=-2; r < 2; r++)
+//      {
+//    	  for(int c=-2; c < 2; c++)
+//    	  {
+//    		  cm[ g[0] + c + (g[1] + r)*nx ] = 0 ;
+//    	  }
+//      }
     }
 
   //
@@ -219,7 +231,6 @@ namespace navfn {
       grady = new float[ns];
     }
 
-
   //
   // set up cost array, usually from ROS
   //
@@ -228,7 +239,7 @@ namespace navfn {
     NavFn::setCostmap(const COSTTYPE *cmap, bool isROS, bool allow_unknown)
     {
       COSTTYPE *cm = costarr;
-      if (isROS)			// ROS-type cost array
+      if (isROS)			// ROS-type cost array (true)
       {
         for (int i=0; i<ny; i++)
         {
@@ -250,9 +261,9 @@ namespace navfn {
             }
             else if(v == COST_UNKNOWN_ROS && allow_unknown)
             {
-              v = COST_OBS-1;
-              *cm = v;
-            }
+				v = COST_OBS-1;
+				*cm = v;
+			}
           }
         }
       }
@@ -321,7 +332,8 @@ namespace navfn {
       setupNavFn(true);
 
       // calculate the nav fn and path
-      propNavFnAstar(std::max(nx*ny/20,nx+ny));
+      //propNavFnAstar(std::max(nx*ny/20,nx+ny));
+      propNavFnAstar(nx*ny);
       // path
       int len = calcPath(nx*4);
 
@@ -371,7 +383,7 @@ namespace navfn {
         gradx[i] = grady[i] = 0.0;
       }
 
-      // outer bounds of cost array
+      // outer bounds of cost array ( path cannot exceeds these bounds )
       COSTTYPE *pc;
       pc = costarr;
       for (int i=0; i<nx; i++)
