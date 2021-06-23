@@ -15,3 +15,17 @@ Related stacks:
 
 For discussion, please check out the
 https://groups.google.com/group/ros-sig-navigation mailing list.
+
+=======================================================================================
+23 June 2021 by hkm
+
+To overay your custom navigation stack on the standard ros pack installed in your PC
+
+    1. make sure to remove out  "source catkin_ws/devel/setup.bash" in your bashrc
+    2. then, open a prompt, go to catkin_ws followed by "source /opt/ros/<version>/setup.bash"
+    3. do catkin_make to recompile your navigation stack
+    4. finally, run "source catkin_ws/devel/setup.bash"
+    5. try roscd to your custom overayed nav stack. 
+
+
+
