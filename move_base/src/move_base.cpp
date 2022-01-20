@@ -668,7 +668,7 @@ ROS_WARN("@MoveBase::planThread  gotPlan (%d) to the temp_goal (%f %f) \n", gotP
       	  num_replans_to_the_samegoal++;
 ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_replans_to_the_samegoal );
 
-      	  if( num_replans_to_the_samegoal > 2 )
+      	  if( num_replans_to_the_samegoal >= 2 )
       	  {
       		  // Tell FrontierDetector to recompute frontier points and the paths to them
       		  std_msgs::Bool recompute_flag;
@@ -1169,6 +1169,7 @@ ROS_WARN("@MoveBase::planThread failed to find a valid plan. planning retries (%
       return false;
     }
 
+    ROS_WARN("Successfully loaded %d num of behaviors \n", behavior_list.size());
     //if we've made it here... we've constructed a recovery behavior list successfully
     return true;
   }
