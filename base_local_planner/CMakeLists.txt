@@ -24,10 +24,10 @@ find_package(catkin REQUIRED
             voxel_grid
         )
 
-find_package(Boost REQUIRED
-    COMPONENTS
-        thread
-        )
+# find_package(Boost REQUIRED
+#     COMPONENTS
+#         thread
+#         )
 
 find_package(Eigen3 REQUIRED)
 remove_definitions(-DDISABLE_LIBUSB-1.0)

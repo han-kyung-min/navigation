@@ -8,6 +8,7 @@ find_package(catkin REQUIRED
             tf2_ros
             costmap_2d
         )
+message("INCLUDE_DIRS " $INCLUDE_DIRS)
 
 catkin_package(
     INCLUDE_DIRS
