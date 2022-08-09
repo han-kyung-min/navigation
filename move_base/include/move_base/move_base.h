@@ -70,6 +70,8 @@ namespace move_base {
     CONTROLLING,
     CLEARING
   };
+  static const char *movebase_str[] =
+          { "PLANNING", "CONTROLLING", "CLEARING" };
 
   enum RecoveryTrigger
   {
@@ -77,6 +79,9 @@ namespace move_base {
     CONTROLLING_R,
     OSCILLATION_R
   };
+
+  static const char *recovery_trigger_str[] =
+          { "PLANNING_R", "CONTROLLING_R", "OSCILLATION_R" };
 
   /**
    * @class MoveBase
@@ -225,6 +230,9 @@ namespace move_base {
       boost::recursive_mutex planner_mutex_;
       boost::condition_variable_any planner_cond_;
       geometry_msgs::PoseStamped planner_goal_, previous_goal_; // prev goal added by hkm
+      std::vector<geometry_msgs::PoseStamped> m_unreachable_goals; // by hkm
+      std::mutex mutex_unreachable_goals; // by hkm
+
       boost::thread* planner_thread_;
 
       boost::recursive_mutex configuration_mutex_;

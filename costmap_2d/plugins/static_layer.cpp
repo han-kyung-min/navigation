@@ -179,7 +179,7 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
        master->getOriginY() != new_map->info.origin.position.y))
   {
     // Update the size of the layered costmap (and all layers, including this one)
-    ROS_INFO("Resizing costmap to %d X %d at %f m/pix", size_x, size_y, new_map->info.resolution);
+    //ROS_INFO("Resizing costmap to %d X %d at %f m/pix", size_x, size_y, new_map->info.resolution);
     layered_costmap_->resizeMap(size_x, size_y, new_map->info.resolution, new_map->info.origin.position.x,
                                 new_map->info.origin.position.y,
                                 true /* set size_locked to true, prevents reconfigureCb from overriding map size*/);
