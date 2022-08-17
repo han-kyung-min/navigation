@@ -76,11 +76,13 @@ namespace base_local_planner {
   }
 
   TrajectoryPlannerROS::TrajectoryPlannerROS() :
-      world_model_(NULL), tc_(NULL), costmap_ros_(NULL), tf_(NULL), setup_(false), initialized_(false), odom_helper_("odom") {}
+      world_model_(NULL), tc_(NULL), costmap_ros_(NULL), tf_(NULL), setup_(false), initialized_(false), odom_helper_("odom")
+  	  { ROS_INFO("TrajectoryPlannerROS() type 1 constructor "); }
 
   TrajectoryPlannerROS::TrajectoryPlannerROS(std::string name, tf2_ros::Buffer* tf, costmap_2d::Costmap2DROS* costmap_ros) :
       world_model_(NULL), tc_(NULL), costmap_ros_(NULL), tf_(NULL), setup_(false), initialized_(false), odom_helper_("odom") {
 
+	  ROS_INFO("TrajectoryPlannerROS() type 2 constructor ");
       //initialize the planner
       initialize(name, tf, costmap_ros);
   }
@@ -88,8 +90,11 @@ namespace base_local_planner {
   void TrajectoryPlannerROS::initialize(
       std::string name,
       tf2_ros::Buffer* tf,
-      costmap_2d::Costmap2DROS* costmap_ros){
-    if (! isInitialized()) {
+      costmap_2d::Costmap2DROS* costmap_ros)
+  	  {
+
+    if (! isInitialized())
+    {
 
       ros::NodeHandle private_nh("~/" + name);
       g_plan_pub_ = private_nh.advertise<nav_msgs::Path>("global_plan", 1);
@@ -266,6 +271,8 @@ namespace base_local_planner {
     } else {
       ROS_WARN("This planner has already been initialized, doing nothing");
     }
+
+    ROS_INFO("Local planner (trajectory_planner) has been initialized \n");
   }
 
   std::vector<double> TrajectoryPlannerROS::loadYVels(ros::NodeHandle node){
@@ -411,6 +418,8 @@ namespace base_local_planner {
       return false;
     }
 
+//global_plan_[0].header.frame_id.c_str(), transformed_plan[0].header.frame_id.c_str(), global_frame_.c_str() :  map / map / map
+
     //now we'll prune the plan based on the position of the robot
     if(prune_plan_)
       prunePlan(global_pose, transformed_plan, global_plan_);
@@ -440,9 +449,15 @@ namespace base_local_planner {
 
     double goal_th = yaw;
 
-    //check to see if we've reached the goal position
-    if (xy_tolerance_latch_ || (getGoalPositionDistance(global_pose, goal_x, goal_y) <= xy_goal_tolerance_)) {
+    double fdist2goal = getGoalPositionDistance(global_pose, goal_x, goal_y) ;
 
+ROS_DEBUG_NAMED("trajectory_planner_ros", " dist2goal: %f / %f", fdist2goal, xy_goal_tolerance_ );
+
+    //check to see if we've reached the goal position
+    if (xy_tolerance_latch_ || ( fdist2goal <= xy_goal_tolerance_) )
+    {
+
+ROS_DEBUG_NAMED("trajectory_planner_ros", "dist2goal: %f", (global_pose, goal_x, goal_y) );
       //if the user wants to latch goal tolerance, if we ever reach the goal location, we'll
       //just rotate in place
       if (latch_xy_goal_tolerance_) {
@@ -450,8 +465,11 @@ namespace base_local_planner {
       }
 
       double angle = getGoalOrientationAngleDifference(global_pose, goal_th);
+
       //check to see if the goal orientation has been reached
-      if (fabs(angle) <= yaw_goal_tolerance_) {
+      if (fabs(angle) <= yaw_goal_tolerance_)
+      {
+ROS_DEBUG_NAMED("trajectory_planner_ros", " yaw goal tolerance has been reached \n" );
         //set the velocity command to zero
         cmd_vel.linear.x = 0.0;
         cmd_vel.linear.y = 0.0;
@@ -460,6 +478,7 @@ namespace base_local_planner {
         xy_tolerance_latch_ = false;
         reached_goal_ = true;
       } else {
+ROS_DEBUG_NAMED("trajectory_planner_ros", " yaw goal tolerance has been reached %f %f \n", fabs(angle), yaw_goal_tolerance_  );
         //we need to call the next two lines to make sure that the trajectory
         //planner updates its path distance and goal distance grids
         tc_->updatePlan(transformed_plan);
@@ -540,6 +559,7 @@ namespace base_local_planner {
       q.setRPY(0, 0, p_th);
       tf2::convert(q, pose.pose.orientation);
       local_plan.push_back(pose);
+      //ROS_DEBUG_NAMED("based_local_planner: ", "(%f %f %f)\t", p_x, p_y, p_th );
     }
 
     //publish information to the visualizer

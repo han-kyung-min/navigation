@@ -137,6 +137,8 @@ namespace dwa_local_planner {
     else{
       ROS_WARN("This planner has already been initialized, doing nothing.");
     }
+
+    ROS_INFO("@dwa_planner DWA planner has been initialized");
   }
   
   bool DWAPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan) {

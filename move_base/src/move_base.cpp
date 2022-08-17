@@ -908,12 +908,14 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
     feedback.base_position = current_position;
     as_->publishFeedback(feedback);
 
-ROS_INFO("@MoveBase::executeCycle current states: %s / %s \n", move_base::movebase_str[state_], move_base::recovery_trigger_str[recovery_trigger_] );
+ROS_DEBUG("@MoveBase::executeCycle current states: %s / %s \n", move_base::movebase_str[state_], move_base::recovery_trigger_str[recovery_trigger_] );
+ROS_DEBUG_NAMED("move_base", "curr_position/ osci pose (%f %f)/(%f %f)\n",
+		current_position.pose.position.x, current_position.pose.position.y, oscillation_pose_.pose.position.x, oscillation_pose_.pose.position.y );
     //check to see if we've moved far enough to reset our oscillation timeout
     if(distance(current_position, oscillation_pose_) >= oscillation_distance_)
     {
-ROS_INFO("@MoveBase::executeCycle moved far enough to reset osc state \n");
-      last_oscillation_reset_ = ros::Time::now();
+    	ROS_DEBUG_NAMED("move_base","the robot is moving forward OK. Therefore, we continuously reset oscillation state \n");
+      last_oscillation_reset_ = ros::Time::now(); // this gets updated continuously in normal driving mode. i.e) driving forward with nonzero x speed
       oscillation_pose_ = current_position;
 
       //if our last recovery was caused by oscillation, we want to reset the recovery index 
@@ -998,10 +1000,12 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 			return true;
 		}
 
+		ROS_DEBUG_NAMED("move_base", "last oscillation reset, curr time, osci timeout: %d %d %f",  last_oscillation_reset_.sec, ros::Time::now().sec, oscillation_timeout_ );
 		//check for an oscillation condition
 		if(oscillation_timeout_ > 0.0 &&
 			last_oscillation_reset_ + ros::Duration(oscillation_timeout_) < ros::Time::now())
 		{
+		ROS_DEBUG_NAMED("move_base", "trigger the oscillation recovery \n");
 		  publishZeroVelocity();
 		  state_ = CLEARING;
 		  recovery_trigger_ = OSCILLATION_R;

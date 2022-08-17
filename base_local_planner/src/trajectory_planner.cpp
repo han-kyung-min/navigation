@@ -543,6 +543,7 @@ namespace base_local_planner{
     if( final_goal_position_valid_ ){
       double final_goal_dist = hypot( final_goal_x_ - x, final_goal_y_ - y );
       max_vel_x = min( max_vel_x, final_goal_dist / sim_time_ );
+      ROS_DEBUG_NAMED("trajectory_planner","final goal position is valid. max_vel_x : %f \n",max_vel_x);
     }
 
     //should we use the dynamic window approach?
@@ -552,12 +553,14 @@ namespace base_local_planner{
 
       max_vel_theta = min(max_vel_th_, vtheta + acc_theta * sim_period_);
       min_vel_theta = max(min_vel_th_, vtheta - acc_theta * sim_period_);
+      ROS_DEBUG_NAMED("trajectory_planner", "<dwa> max vx, min vx, max vth, min vth: %f %f %f %f \n", max_vel_x, min_vel_x, max_vel_theta, min_vel_theta);
     } else {
       max_vel_x = max(min(max_vel_x, vx + acc_x * sim_time_), min_vel_x_);
       min_vel_x = max(min_vel_x_, vx - acc_x * sim_time_);
 
       max_vel_theta = min(max_vel_th_, vtheta + acc_theta * sim_time_);
       min_vel_theta = max(min_vel_th_, vtheta - acc_theta * sim_time_);
+      ROS_DEBUG_NAMED("trajectory_planner", "<traj_rollout> max vx, min vx, max vth, min vth: %f %f %f %f \n", max_vel_x, min_vel_x, max_vel_theta, min_vel_theta);
     }
 
 
@@ -582,16 +585,20 @@ namespace base_local_planner{
     double impossible_cost = path_map_.obstacleCosts();
 
     //if we're performing an escape we won't allow moving forward
-    if (!escaping_) {
+    if (!escaping_)
+    {
+ROS_DEBUG_NAMED("trajectory_planner","is in non-escaping mode computing the best traj. \n");
       //loop through all x velocities
-      for(int i = 0; i < vx_samples_; ++i) {
+      for(int i = 0; i < vx_samples_; ++i)
+      {
         vtheta_samp = 0;
         //first sample the straight trajectory testing for (vx_samp, vtheta_samp) sample pairs
         generateTrajectory(x, y, theta, vx, vy, vtheta, vx_samp, vy_samp, vtheta_samp,
             acc_x, acc_y, acc_theta, impossible_cost, *comp_traj);
 
-        //if the new trajectory is better... let's take it
-        if(comp_traj->cost_ >= 0 && (comp_traj->cost_ < best_traj->cost_ || best_traj->cost_ < 0)){
+        //if the new trajectory is better... let's take it (The smaller, the better cost, but it has to be positive !!!)
+        if(comp_traj->cost_ >= 0 && (comp_traj->cost_ < best_traj->cost_ || best_traj->cost_ < 0))
+        {
           swap = best_traj;
           best_traj = comp_traj;
           comp_traj = swap;
@@ -599,7 +606,8 @@ namespace base_local_planner{
 
         vtheta_samp = min_vel_theta;
         //next sample all theta trajectories
-        for(int j = 0; j < vtheta_samples_ - 1; ++j){
+        for(int j = 0; j < vtheta_samples_ - 1; ++j)
+        {
           generateTrajectory(x, y, theta, vx, vy, vtheta, vx_samp, vy_samp, vtheta_samp,
               acc_x, acc_y, acc_theta, impossible_cost, *comp_traj);
 
@@ -643,17 +651,20 @@ namespace base_local_planner{
           comp_traj = swap;
         }
       }
-    } // end if not escaping
+    } // end if not escaping mode
+
+    ROS_DEBUG_NAMED("trajectory_planner", "non escaping best_traj: cost vx vth: %f %f %f \n", best_traj->cost_, best_traj->xv_, best_traj->thetav_ );
 
     //next we want to generate trajectories for rotating in place
     vtheta_samp = min_vel_theta;
-    vx_samp = 0.0;
+    vx_samp = 0.0; 	// vx is set to 0
     vy_samp = 0.0;
 
     //let's try to rotate toward open space
     double heading_dist = DBL_MAX;
 
-    for(int i = 0; i < vtheta_samples_; ++i) {
+    for(int i = 0; i < vtheta_samples_; ++i)
+    {
       //enforce a minimum rotational velocity because the base can't handle small in-place rotations
       double vtheta_samp_limited = vtheta_samp > 0 ? max(vtheta_samp, min_in_place_vel_th_)
         : min(vtheta_samp, -1.0 * min_in_place_vel_th_);
@@ -665,7 +676,8 @@ namespace base_local_planner{
       //note if we can legally rotate in place we prefer to do that rather than move with y velocity
       if(comp_traj->cost_ >= 0
           && (comp_traj->cost_ <= best_traj->cost_ || best_traj->cost_ < 0 || best_traj->yv_ != 0.0)
-          && (vtheta_samp > dvtheta || vtheta_samp < -1 * dvtheta)){
+          && (vtheta_samp > dvtheta || vtheta_samp < -1 * dvtheta))
+      {
         double x_r, y_r, th_r;
         comp_traj->getEndpoint(x_r, y_r, th_r);
         x_r += heading_lookahead_ * cos(th_r);
@@ -673,7 +685,8 @@ namespace base_local_planner{
         unsigned int cell_x, cell_y;
 
         //make sure that we'll be looking at a legal cell
-        if (costmap_.worldToMap(x_r, y_r, cell_x, cell_y)) {
+        if (costmap_.worldToMap(x_r, y_r, cell_x, cell_y))
+        {
           double ahead_gdist = goal_map_(cell_x, cell_y).target_dist;
           if (ahead_gdist < heading_dist) {
             //if we haven't already tried rotating left since we've moved forward
@@ -697,12 +710,18 @@ namespace base_local_planner{
       vtheta_samp += dvtheta;
     }
 
+ROS_INFO("the final best traj (cost, xv, th): [%f] [%f] [%f] \n ", best_traj->cost_, best_traj->xv_, best_traj->thetav_) ;
     //do we have a legal trajectory
-    if (best_traj->cost_ >= 0) {
+    if (best_traj->cost_ >= 0)
+    {
       // avoid oscillations of in place rotation and in place strafing
-      if ( ! (best_traj->xv_ > 0)) {
-        if (best_traj->thetav_ < 0) {
-          if (rotating_right) {
+      if ( ! (best_traj->xv_ > 0))
+      {
+ROS_INFO("(+) cost and (0) vx case 1 \n") ;
+        if (best_traj->thetav_ < 0)
+        {
+          if (rotating_right)
+          {
             stuck_right = true;
           }
           rotating_right = true;
@@ -729,7 +748,8 @@ namespace base_local_planner{
       }
 
       double dist = hypot(x - prev_x_, y - prev_y_);
-      if (dist > oscillation_reset_dist_) {
+      if (dist > oscillation_reset_dist_)
+      {
         rotating_left = false;
         rotating_right = false;
         strafe_left = false;
@@ -745,6 +765,18 @@ namespace base_local_planner{
           fabs(angles::shortest_angular_distance(escape_theta_, theta)) > escape_reset_theta_){
         escaping_ = false;
       }
+
+ROS_INFO(" rotate_left (%d) rotate_right (%d) strafe_left (%d) strafe_right (%d) stuck_left (%d) stuck_right (%d) stuck_left_strafe (%d) stuck_right_strafe (%d) \n",
+
+    		  	  rotating_left,
+		        rotating_right,
+		        strafe_left,
+		        strafe_right,
+		        stuck_left,
+		        stuck_right,
+		        stuck_left_strafe,
+		        stuck_right_strafe
+      );
 
       return *best_traj;
     }
@@ -796,54 +828,69 @@ namespace base_local_planner{
     }
 
     //do we have a legal trajectory
-    if (best_traj->cost_ >= 0) {
-      if (!(best_traj->xv_ > 0)) {
-        if (best_traj->thetav_ < 0) {
-          if (rotating_right){
-            stuck_right = true;
-          }
-          rotating_left = true;
-        } else if(best_traj->thetav_ > 0) {
-          if(rotating_left){
-            stuck_left = true;
-          }
-          rotating_right = true;
-        } else if(best_traj->yv_ > 0) {
-          if(strafe_right){
-            stuck_right_strafe = true;
-          }
-          strafe_left = true;
-        } else if(best_traj->yv_ < 0) {
-          if(strafe_left){
-            stuck_left_strafe = true;
-          }
-          strafe_right = true;
-        }
+    if (best_traj->cost_ >= 0)
+    {
+    	if (!(best_traj->xv_ > 0))
+    	{
+ROS_INFO("(+) cost and (0) vx case 2 \n") ;
+    		if (best_traj->thetav_ < 0)
+    		{
+    			if (rotating_right)
+    			{
+					stuck_right = true;
+    			}
+    			rotating_left = true;
+    		}
+    		else if(best_traj->thetav_ > 0)
+    		{
+    			if(rotating_left)
+    			{
+    				stuck_left = true;
+    			}
+    			rotating_right = true;
+    		}
+    		else if(best_traj->yv_ > 0)
+    		{
+    			if(strafe_right)
+    			{
+    				stuck_right_strafe = true;
+    			}
+    			strafe_left = true;
+    		}
+    		else if(best_traj->yv_ < 0)
+    		{
+    			if(strafe_left)
+    			{
+    				stuck_left_strafe = true;
+    			}
+    				strafe_right = true;
+    		}
 
         //set the position we must move a certain distance away from
         prev_x_ = x;
         prev_y_ = y;
-
       }
 
-      double dist = hypot(x - prev_x_, y - prev_y_);
-      if(dist > oscillation_reset_dist_) {
-        rotating_left = false;
-        rotating_right = false;
-        strafe_left = false;
-        strafe_right = false;
-        stuck_left = false;
-        stuck_right = false;
-        stuck_left_strafe = false;
-        stuck_right_strafe = false;
-      }
+    	double dist = hypot(x - prev_x_, y - prev_y_);
+    	if(dist > oscillation_reset_dist_)
+    	{
+			rotating_left = false;
+			rotating_right = false;
+			strafe_left = false;
+			strafe_right = false;
+			stuck_left = false;
+			stuck_right = false;
+			stuck_left_strafe = false;
+			stuck_right_strafe = false;
+    	}
 
-      dist = hypot(x - escape_x_, y - escape_y_);
-      if(dist > escape_reset_dist_ || fabs(angles::shortest_angular_distance(escape_theta_, theta)) > escape_reset_theta_) {
-        escaping_ = false;
-      }
+		dist = hypot(x - escape_x_, y - escape_y_);
+		if(dist > escape_reset_dist_ || fabs(angles::shortest_angular_distance(escape_theta_, theta)) > escape_reset_theta_)
+		{
+			escaping_ = false;
+		}
 
-      return *best_traj;
+		return *best_traj;
     }
 
     //and finally, if we can't do anything else, we want to generate trajectories that move backwards slowly
@@ -905,7 +952,8 @@ namespace base_local_planner{
 
   //given the current state of the robot, find a good trajectory
   Trajectory TrajectoryPlanner::findBestPath(const geometry_msgs::PoseStamped& global_pose,
-      geometry_msgs::PoseStamped& global_vel, geometry_msgs::PoseStamped& drive_velocities) {
+      geometry_msgs::PoseStamped& global_vel, geometry_msgs::PoseStamped& drive_velocities)
+  {
 
     Eigen::Vector3f pos(global_pose.pose.position.x, global_pose.pose.position.y, tf2::getYaw(global_pose.pose.orientation));
     Eigen::Vector3f vel(global_vel.pose.position.x, global_vel.pose.position.y, tf2::getYaw(global_vel.pose.orientation));
@@ -936,6 +984,7 @@ namespace base_local_planner{
     goal_map_.setLocalGoal(costmap_, global_plan_);
     ROS_DEBUG("Path/Goal distance computed");
 
+//ROS_INFO("curr pose vel: %f %f %f %f %f %f \n", pos[0], pos[1], pos[2], vel[0], vel[1], vel[2]);
     //rollout trajectories and find the minimum cost one
     Trajectory best = createTrajectories(pos[0], pos[1], pos[2],
         vel[0], vel[1], vel[2],
@@ -968,6 +1017,7 @@ namespace base_local_planner{
     */
 
     if(best.cost_ < 0){
+    	ROS_INFO("best.cost_ < 0 \n" );
       drive_velocities.pose.position.x = 0;
       drive_velocities.pose.position.y = 0;
       drive_velocities.pose.position.z = 0;
@@ -983,6 +1033,7 @@ namespace base_local_planner{
       tf2::Quaternion q;
       q.setRPY(0, 0, best.thetav_);
       tf2::convert(q, drive_velocities.pose.orientation);
+      ROS_INFO("cmdvel found %f %f %f \n", best.xv_, best.yv_, best.thetav_ );
     }
 
     return best;
