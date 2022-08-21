@@ -245,6 +245,7 @@ namespace move_base {
       bool setup_, p_freq_change_, c_freq_change_;
       bool new_global_plan_;
 
+      bool mb_is_goal_covered ;
     public:
 
       inline bool planner_goal_equals_to_prevgoal( )
@@ -258,6 +259,43 @@ namespace move_base {
     	  float fydiff = (previous_goal_.pose.position.y - planner_goal_.pose.position.y) ;
     	  return std::sqrt( fxdiff * fxdiff + fydiff * fydiff ) < 0.001 ? true : false;
       }
+
+      inline bool is_goal_covered( const costmap_2d::Costmap2D* pocostmap, const geometry_msgs::PoseStamped& goal)
+      {
+    	    const double wx = goal.pose.position.x ;
+    	    const double wy = goal.pose.position.y ;
+    	    uint32_t mx, my;
+    	    pocostmap->worldToMap(wx, wy, mx, my);
+
+    		// 0	1	2
+    		// 3		5
+    		// 6	7	8
+    	    //int x0, x1, x2, x3, x5, x6, x7, x8, y0, y1, y2, y3, y5, y6, y7, y8;
+    		unsigned int c0 = pocostmap->getCost( mx - 1	,	my - 1 );
+    		unsigned int c1 = pocostmap->getCost( mx		,	my - 1 );
+    		unsigned int c2 = pocostmap->getCost( mx + 1	,	my - 1 );
+
+    		unsigned int c3 = pocostmap->getCost( mx - 1	,  my ) ;
+    		unsigned int c4 = pocostmap->getCost( mx		,  my ) ;
+    		unsigned int c5 = pocostmap->getCost( mx + 1	,  my ) ;
+
+    		unsigned int c6 = pocostmap->getCost( mx - 1	,  my + 1);
+    		unsigned int c7 = pocostmap->getCost( mx		,  my + 1);
+    		unsigned int c8 = pocostmap->getCost( mx + 1	,  my + 1);
+
+//    		ROS_WARN("mx my wx wy ox oy res: %d %d %f %f %f %f \n", mx, my, wx, wy, pocostmap->getOriginX(), pocostmap->getOriginY(), pocostmap->getResolution() );
+ //   		ROS_ERROR("\n %u %u %u \n %u %u %u \n %u %u %u \n", c0, c1, c2, c3, c4, c5, c6, c7, c8);
+    		if( c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 )
+    		{
+    			return false ;
+    		}
+    		else
+    		{
+    			ROS_ERROR("This point is covered online \n");
+    			return true ;
+    		}
+      }
+
 
       bool isDone(){ return isdone; };
       void ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone) ;

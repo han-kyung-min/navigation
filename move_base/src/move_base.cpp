@@ -99,7 +99,7 @@ namespace move_base {
     vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
     current_goal_pub_ = private_nh.advertise<geometry_msgs::PoseStamped>("current_goal", 0 );
     recompute_paths_to_frontiers_pub_ = nh.advertise<std_msgs::Bool>("reset_paths_to_frontiers", 1);
-    unreachable_frontier_pub_		  = nh.advertise<geometry_msgs::PoseStamped>("unreachable_frontier", 1);
+    unreachable_frontier_pub_		  = nh.advertise<geometry_msgs::PoseStamped>("unreachable_posestamped", 1);
 
     ros::NodeHandle action_nh("move_base");
     action_goal_pub_ = action_nh.advertise<move_base_msgs::MoveBaseActionGoal>("goal", 1);
@@ -508,7 +508,7 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
     if(!planner_->makePlan(start, goal, plan) || plan.empty())
     {
 //ROS_WARN("===== MoveBase::makPlan() failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
-      //ROS_DEBUG_NAMED("move_base","Failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
+      ROS_DEBUG_NAMED("move_base","Failed to find a  plan to point (%.2f, %.2f)", goal.pose.position.x, goal.pose.position.y);
       return false;
     }
 //    else if( !isValidPlan(plan) ) // by hkm
@@ -604,7 +604,7 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
 
 		  if( cost0 >= 254 )
 		  {
-			  ROS_ERROR(" This plan is invalid \n");
+			  ROS_ERROR(" This plan is invalid b/c there is a collision btwn the plan and the costmap \n");
 			  return false;
 		  }
 	  }
@@ -679,11 +679,14 @@ ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_repla
       		  recompute_paths_to_frontiers_pub_.publish(recompute_flag);
       		  // publish the current pose as an unreachable frontier
       		  unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
-      		  m_unreachable_goals.push_back( planner_goal_ );
-              state_ = PLANNING;
-              runPlanner_ = false;  //
-              publishZeroVelocity();
+      		  //m_unreachable_goals.push_back( planner_goal_ );
+            state_ = CLEARING;
+            runPlanner_ = false;  // proper solution for issue #523
+            publishZeroVelocity();
+            recovery_trigger_ = PLANNING_R;
 
+            //as_->setAborted(move_base_msgs::MoveBaseResult(), "Multiple replaning failure. Setting this point as an unreachable one");
+            ROS_ERROR("Replanning failed for %d times \n", num_replans_to_the_samegoal);
       		  num_replans_to_the_samegoal = 0;
       	  }
         }
@@ -713,6 +716,9 @@ ROS_WARN("@MoveBase::planThread failed to find a valid plan. (planning retries)/
            (ros::Time::now() > attempt_end || (uint32_t)planning_retries_ > (uint32_t)max_planning_retries_ ))
         {
 ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base changing the state to CLEARING mode \n", (uint32_t)planning_retries_ );
+
+  	  	  	  unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
+			  //m_unreachable_goals.push_back( planner_goal_ );
 
 			//pub// by hkm
           //we'll move into our obstacle clearing mode
@@ -899,9 +905,16 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
     geometry_msgs::Twist cmd_vel;
 
     //update feedback to correspond to our curent position
-    geometry_msgs::PoseStamped global_pose;
+    geometry_msgs::PoseStamped global_pose ;
     getRobotPose(global_pose, planner_costmap_ros_);
     const geometry_msgs::PoseStamped& current_position = global_pose;
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+// check if the target has covered... ----------> early termination if so
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+    costmap_2d::Costmap2D* pocostmap = planner_costmap_ros_->getCostmap() ;
+    mb_is_goal_covered = is_goal_covered( pocostmap, goal);
+
 
     //push the feedback out
     move_base_msgs::MoveBaseFeedback feedback;
@@ -986,7 +999,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 		ROS_DEBUG_NAMED("move_base","In controlling state.");
 
 		//check to see if we've reached our goal
-		if(tc_->isGoalReached())
+		if(tc_->isGoalReached() ) // || mb_is_goal_covered) // by kmhan
 		{
 			ROS_DEBUG_NAMED("move_base","Goal reached!");
 			resetState();
@@ -1061,7 +1074,10 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 		//we'll try to clear out space with any user-provided recovery behaviors
 		case CLEARING:
 		ROS_DEBUG_NAMED("move_base","In clearing/recovery state");
-ROS_INFO("@move_base::executeCycle()  recovery enabled, recovery_index, num recov behavs: (%d, %d, %d)... \n", recovery_behavior_enabled_, recovery_index_,  recovery_behaviors_.size());
+ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : (%s), num recov behavs: : (%d)... \n",
+		recovery_behavior_enabled_	?"true":"false",
+		recovery_index_				?"true":"false", 	recovery_behaviors_.size() );
+
 		//we'll invoke whatever recovery behavior we're currently on if they're enabled
 		if(recovery_behavior_enabled_ && recovery_index_ < recovery_behaviors_.size())
 		{
@@ -1112,7 +1128,7 @@ ROS_INFO("@move_base::executeCycle()  starting the recovery behavior ... \n");
 			// We should not consider this pt no logner !!! hkm (22.8.9)
 			ROS_DEBUG_NAMED("move_base_recovery","publishing %f %f as unreachable fpt \n", planner_goal_.pose.position.x, planner_goal_.pose.position.y );
 			unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
-			m_unreachable_goals.push_back( planner_goal_ );		// by hkm
+			//m_unreachable_goals.push_back( planner_goal_ );		// by hkm
 
 			resetState();
 			return true;
