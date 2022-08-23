@@ -158,6 +158,11 @@ namespace move_base {
       void publishZeroVelocity();
 
       /**
+       * @brief  Publishes a velocity command of turning to the base
+       */
+      void publishRotateVelocity();
+
+      /**
        * @brief  Reset the state of the move_base action and send a zero velocity command to the base
        */
       void resetState();
@@ -260,41 +265,56 @@ namespace move_base {
     	  return std::sqrt( fxdiff * fxdiff + fydiff * fydiff ) < 0.001 ? true : false;
       }
 
-      inline bool is_goal_covered( const costmap_2d::Costmap2D* pocostmap, const geometry_msgs::PoseStamped& goal)
+      inline bool is_goal_covered( const geometry_msgs::PoseStamped& goal)
       {
-    	    const double wx = goal.pose.position.x ;
-    	    const double wy = goal.pose.position.y ;
-    	    uint32_t mx, my;
-    	    pocostmap->worldToMap(wx, wy, mx, my);
+    	  costmap_2d::Costmap2D* pocostmap = planner_costmap_ros_->getCostmap();
+    		geometry_msgs::PoseStamped robotpose;
+    		getRobotPose(robotpose, planner_costmap_ros_);
+
+    		const double wx_r = robotpose.pose.position.x ;
+			const double wy_r = robotpose.pose.position.y ;
+    	    const double wx_g = goal.pose.position.x ;
+    	    const double wy_g = goal.pose.position.y ;
+    	    uint32_t mx_r, my_r, mx_g, my_g;
+    	    pocostmap->worldToMap(wx_r, wy_r, mx_r, my_r);
+    	    pocostmap->worldToMap(wx_g, wy_g, mx_g, my_g);
+
+    	    float r2gdist_world = std::sqrt( (wx_r - wx_g) * (wx_r - wx_g) + (wy_r - wy_g) * (wy_r - wy_g) ) ;
 
     		// 0	1	2
     		// 3		5
     		// 6	7	8
     	    //int x0, x1, x2, x3, x5, x6, x7, x8, y0, y1, y2, y3, y5, y6, y7, y8;
-    		unsigned int c0 = pocostmap->getCost( mx - 1	,	my - 1 );
-    		unsigned int c1 = pocostmap->getCost( mx		,	my - 1 );
-    		unsigned int c2 = pocostmap->getCost( mx + 1	,	my - 1 );
+    		unsigned int c0 = pocostmap->getCost( mx_r - 1	,	my_r - 1 );
+    		unsigned int c1 = pocostmap->getCost( mx_r		,	my_r - 1 );
+    		unsigned int c2 = pocostmap->getCost( mx_r + 1	,	my_r - 1 );
 
-    		unsigned int c3 = pocostmap->getCost( mx - 1	,  my ) ;
-    		unsigned int c4 = pocostmap->getCost( mx		,  my ) ;
-    		unsigned int c5 = pocostmap->getCost( mx + 1	,  my ) ;
+    		unsigned int c3 = pocostmap->getCost( mx_r - 1	,  my_r ) ;
+    		unsigned int c4 = pocostmap->getCost( mx_r		,  my_r ) ;
+    		unsigned int c5 = pocostmap->getCost( mx_r + 1	,  my_r ) ;
 
-    		unsigned int c6 = pocostmap->getCost( mx - 1	,  my + 1);
-    		unsigned int c7 = pocostmap->getCost( mx		,  my + 1);
-    		unsigned int c8 = pocostmap->getCost( mx + 1	,  my + 1);
+    		unsigned int c6 = pocostmap->getCost( mx_r - 1	,  my_r + 1);
+    		unsigned int c7 = pocostmap->getCost( mx_r		,  my_r + 1);
+    		unsigned int c8 = pocostmap->getCost( mx_r + 1	,  my_r + 1);
 
 //    		ROS_WARN("mx my wx wy ox oy res: %d %d %f %f %f %f \n", mx, my, wx, wy, pocostmap->getOriginX(), pocostmap->getOriginY(), pocostmap->getResolution() );
  //   		ROS_ERROR("\n %u %u %u \n %u %u %u \n %u %u %u \n", c0, c1, c2, c3, c4, c5, c6, c7, c8);
-    		if( c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 )
+
+    		if (r2gdist_world < 3.0)
     		{
-    			return false ;
+				if( (c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 ) )
+					return false ;
+				else
+				{
+					ROS_ERROR("This point is covered online \n");
+					true;
+				}
     		}
     		else
-    		{
-    			ROS_ERROR("This point is covered online \n");
-    			return true ;
-    		}
+    			return false ;
       }
+
+      bool is_robot_stuck();
 
 
       bool isDone(){ return isdone; };

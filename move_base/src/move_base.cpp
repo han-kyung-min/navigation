@@ -527,6 +527,14 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
     vel_pub_.publish(cmd_vel);
   }
 
+  void MoveBase::publishRotateVelocity(){
+    geometry_msgs::Twist cmd_vel;
+    cmd_vel.linear.x = 0.0;
+    cmd_vel.linear.y = 0.0;
+    cmd_vel.angular.z = 0.5;
+    vel_pub_.publish(cmd_vel);
+  }
+
   bool MoveBase::isQuaternionValid(const geometry_msgs::Quaternion& q){
     //first we need to check if the quaternion has nan's or infs
     if(!std::isfinite(q.x) || !std::isfinite(q.y) || !std::isfinite(q.z) || !std::isfinite(q.w)){
@@ -682,7 +690,8 @@ ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_repla
       		  //m_unreachable_goals.push_back( planner_goal_ );
             state_ = CLEARING;
             runPlanner_ = false;  // proper solution for issue #523
-            publishZeroVelocity();
+            //publishZeroVelocity();
+             publishRotateVelocity();
             recovery_trigger_ = PLANNING_R;
 
             //as_->setAborted(move_base_msgs::MoveBaseResult(), "Multiple replaning failure. Setting this point as an unreachable one");
@@ -724,7 +733,8 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
           //we'll move into our obstacle clearing mode
           state_ = CLEARING;
           runPlanner_ = false;  // proper solution for issue #523
-          publishZeroVelocity();
+         // publishZeroVelocity();
+          	publishRotateVelocity();
           recovery_trigger_ = PLANNING_R;
         }
 
@@ -912,8 +922,7 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 // check if the target has covered... ----------> early termination if so
 /////////////////////////////////////////////////////////////////////////////////////////////////////
-    costmap_2d::Costmap2D* pocostmap = planner_costmap_ros_->getCostmap() ;
-    mb_is_goal_covered = is_goal_covered( pocostmap, goal);
+    mb_is_goal_covered = is_goal_covered(  goal);
 
 
     //push the feedback out
@@ -999,7 +1008,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 		ROS_DEBUG_NAMED("move_base","In controlling state.");
 
 		//check to see if we've reached our goal
-		if(tc_->isGoalReached() ) // || mb_is_goal_covered) // by kmhan
+		if(tc_->isGoalReached() || mb_is_goal_covered) // by kmhan
 		{
 			ROS_DEBUG_NAMED("move_base","Goal reached!");
 			resetState();
@@ -1079,8 +1088,10 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 		recovery_index_				?"true":"false", 	recovery_behaviors_.size() );
 
 		//we'll invoke whatever recovery behavior we're currently on if they're enabled
-		if(recovery_behavior_enabled_ && recovery_index_ < recovery_behaviors_.size())
+		//if(recovery_behavior_enabled_ && recovery_index_ < recovery_behaviors_.size()
+		if(recovery_behavior_enabled_ && is_robot_stuck() && recovery_index_ < recovery_behaviors_.size()) // kmHan
 		{
+
 ROS_INFO("@move_base::executeCycle()  starting the recovery behavior ... \n");
 			ROS_DEBUG_NAMED("move_base_recovery","Executing behavior %u of %zu", recovery_index_, recovery_behaviors_.size());
 			recovery_behaviors_[recovery_index_]->runBehavior();
@@ -1334,6 +1345,34 @@ ROS_INFO("@move_base::executeCycle()  starting the recovery behavior ... \n");
 
     return true;
   }
+
+
+	bool MoveBase::is_robot_stuck()
+	{
+		geometry_msgs::PoseStamped robotpose;
+		getRobotPose(robotpose, planner_costmap_ros_);
+
+		std::vector<geometry_msgs::Point> oriented_footprint ;
+		planner_costmap_ros_->getOrientedFootprint(oriented_footprint);
+
+		int nstuckcnt = 0 ;
+		for(int idx=0; idx < oriented_footprint.size(); idx++)
+		{
+			uint32_t mx, my;
+			planner_costmap_ros_->getCostmap()->worldToMap( oriented_footprint[idx].x, oriented_footprint[idx].y, mx, my);
+			int nfootcost = static_cast<int>( planner_costmap_ros_->getCostmap()->getCost(mx, my) ) ;
+			if (nfootcost > 100 && nfootcost != 255)
+				nstuckcnt++;
+			ROS_WARN("<< %u %u :  %d >>\n", mx, my, nfootcost );
+		}
+
+		if(nstuckcnt > 0)
+		{
+			ROS_ERROR("robot got stuck !! we need to execute the recovery behavior ! \n");
+			return true;
+		}
+		false;
+	}
 
 
   void MoveBase::ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone)
