@@ -60,6 +60,9 @@
 #include "move_base/MoveBaseConfig.h"
 
 #include <std_msgs/Bool.h>
+#include <thread>
+#include <mutex>
+#include <unistd.h>
 
 namespace move_base {
   //typedefs to help us out with the action server so that we don't hace to type so much
