@@ -1008,7 +1008,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 		ROS_DEBUG_NAMED("move_base","In controlling state.");
 
 		//check to see if we've reached our goal
-		if(tc_->isGoalReached() || mb_is_goal_covered) // by kmhan
+		if(tc_->isGoalReached() ) //|| mb_is_goal_covered) // by kmhan
 		{
 			ROS_DEBUG_NAMED("move_base","Goal reached!");
 			resetState();
