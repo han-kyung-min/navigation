@@ -207,7 +207,7 @@ namespace move_base {
       double planner_frequency_, controller_frequency_, inscribed_radius_, circumscribed_radius_;
       double planner_patience_, controller_patience_;
       int32_t max_planning_retries_;
-      uint32_t planning_retries_, num_replans_to_the_samegoal;
+      uint32_t planning_retries_, num_replans_to_the_samegoal, clearing_retries_ ;
       double conservative_reset_dist_, clearing_radius_;
       ros::Publisher current_goal_pub_, vel_pub_, action_goal_pub_, recompute_paths_to_frontiers_pub_, unreachable_frontier_pub_;
       ros::Subscriber goal_sub_, done_sub_;
@@ -303,13 +303,13 @@ namespace move_base {
 //    		ROS_WARN("mx my wx wy ox oy res: %d %d %f %f %f %f \n", mx, my, wx, wy, pocostmap->getOriginX(), pocostmap->getOriginY(), pocostmap->getResolution() );
  //   		ROS_ERROR("\n %u %u %u \n %u %u %u \n %u %u %u \n", c0, c1, c2, c3, c4, c5, c6, c7, c8);
 
-    		if (r2gdist_world < 1.0)
+    		if (r2gdist_world < 2.0)
     		{
 				if( (c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 ) )
 					return false ;
 				else
 				{
-					ROS_ERROR("This point is covered online \n");
+					ROS_ERROR("This point has been covered online \n");
 					true;
 				}
     		}
