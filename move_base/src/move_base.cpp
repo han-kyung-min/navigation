@@ -692,7 +692,7 @@ ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_repla
             state_ = CLEARING;
             runPlanner_ = false;  // proper solution for issue #523
             //publishZeroVelocity();
-             publishRotateVelocity();
+            // publishRotateVelocity();
             recovery_trigger_ = PLANNING_R;
 
             //as_->setAborted(move_base_msgs::MoveBaseResult(), "Multiple replaning failure. Setting this point as an unreachable one");
