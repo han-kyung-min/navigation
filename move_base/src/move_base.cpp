@@ -735,7 +735,7 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
           state_ = CLEARING;
           runPlanner_ = false;  // proper solution for issue #523
          // publishZeroVelocity();
-          	publishRotateVelocity();
+         // publishRotateVelocity();
           recovery_trigger_ = PLANNING_R;
         }
 
@@ -1024,7 +1024,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 			return true;
 		}
 
-		ROS_DEBUG_NAMED("move_base", "last oscillation reset, curr time, osci timeout: < %d %d %f >",  last_oscillation_reset_.sec, ros::Time::now().sec, oscillation_timeout_ );
+		//ROS_DEBUG_NAMED("move_base", "last oscillation reset, curr time, osci timeout: < %d %d %f >",  last_oscillation_reset_.sec, ros::Time::now().sec, oscillation_timeout_ );
 		//check for an oscillation condition
 		if(oscillation_timeout_ > 0.0 &&
 			last_oscillation_reset_ + ros::Duration(oscillation_timeout_) < ros::Time::now())
@@ -1058,6 +1058,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 				if(ros::Time::now() > attempt_end)
 				{
 					//we'll move into our obstacle clearing mode
+					ROS_DEBUG_NAMED("move_base", "failed get valid control cmd --> missed last valid control timing. We are changing state to CLEARING \n");
 					publishZeroVelocity();
 					state_ = CLEARING;
 					recovery_trigger_ = CONTROLLING_R;
@@ -1066,6 +1067,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 				else
 				{
 					//otherwise, if we can't find a valid control, we'll go back to planning
+					ROS_DEBUG_NAMED("move_base", "failed to get valid control cmd --> Going back to planning \n");
 					last_valid_plan_ = ros::Time::now();
 					planning_retries_ = 0;
 					state_ = PLANNING;
@@ -1091,11 +1093,11 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 
 		//we'll invoke whatever recovery behavior we're currently on if they're enabled
 		//if(recovery_behavior_enabled_ && recovery_index_ < recovery_behaviors_.size()
-		if(recovery_behavior_enabled_  && recovery_index_ < recovery_behaviors_.size() && is_robot_stuck()) // kmHan
+		if(recovery_behavior_enabled_  && recovery_index_ < recovery_behaviors_.size() ) //&& is_robot_stuck()) // kmHan
 		{
 			ROS_DEBUG(" Robot is stuck perhaps ... recovery_trigger_ / clearing_retries_ < %d %d > \n", recovery_trigger_, clearing_retries_);
 			ROS_DEBUG(" starting the recovery behavior (osc timeout/last reset  %f / %d)... \n", oscillation_timeout_ , last_oscillation_reset_.sec);
-			ROS_DEBUG_NAMED("move_base_recovery","Executing behavior %u of %zu", recovery_index_, recovery_behaviors_.size());
+			ROS_WARN(" Executing behavior %u of %zu", recovery_index_, recovery_behaviors_.size());
 			recovery_behaviors_[recovery_index_]->runBehavior();
 
 			//we at least want to give the robot some time to stop oscillating after executing the behavior
@@ -1294,6 +1296,7 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 
   void MoveBase::resetState(){
     // Disable the planner thread
+	  ROS_DEBUG("MoveBase::resetState() is called \n");
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
     runPlanner_ = false;
     lock.unlock();
