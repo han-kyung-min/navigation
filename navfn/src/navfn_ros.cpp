@@ -178,7 +178,7 @@ namespace navfn {
   }
 
   bool NavfnROS::makePlanService(nav_msgs::GetPlan::Request& req, nav_msgs::GetPlan::Response& resp){
-      ROS_WARN("navfnROS makePlanService is called \n");
+	  ROS_DEBUG_NAMED("navfn_ros","navfnROS makePlanService is called \n");
     makePlan(req.start, req.goal, resp.plan.poses);
 
     resp.plan.header.stamp = ros::Time::now();
@@ -204,7 +204,7 @@ namespace navfn {
       ROS_ERROR("This planner has not been initialized yet, but it is being used, please call initialize() before use");
       return false;
     }
-ROS_WARN("NavfnROS::makePlan() is called to find a plan from (%f %f) to the goal (%f %f) \n",
+ROS_DEBUG_NAMED("navfn_ros","NavfnROS::makePlan() is called to find a plan from (%f %f) to the goal (%f %f) \n",
 		start.pose.position.x, start.pose.position.y, goal.pose.position.x, goal.pose.position.y );
     //clear the plan, just in case
     plan.clear();

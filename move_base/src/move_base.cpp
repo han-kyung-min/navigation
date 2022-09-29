@@ -173,6 +173,10 @@ namespace move_base {
     	ROS_WARN("Loading default recovery behaviors \n");
       loadDefaultRecoveryBehaviors();
     }
+    else
+    {
+    	ROS_INFO("Loading custom recovery behaviors \n");
+    }
 
     //initially, we'll need to make a plan
     state_ = PLANNING;
@@ -486,7 +490,7 @@ namespace move_base {
 
   bool MoveBase::makePlan(const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan){
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(planner_costmap_ros_->getCostmap()->getMutex()));
-ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls navfnROS::makePlan()", goal.pose.position.x, goal.pose.position.y );
+    ROS_DEBUG_NAMED("move_base","MoveBase::makePlan() is called to goal(%f %f) \n this function calls navfnROS::makePlan()", goal.pose.position.x, goal.pose.position.y );
     //make sure to set the plan to be empty initially
     plan.clear();
 
@@ -611,7 +615,7 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
 
 		  unsigned char cost0 = planner_costmap_ros_->getCostmap()->getCost(mx, my);
 
-		  if( cost0 >= 254 )
+		  if( cost0 >= 254 && cost0 != 255)
 		  {
 			  ROS_ERROR(" This plan is invalid b/c there is a collision btwn the plan and the costmap \n");
 			  return false;
@@ -622,7 +626,7 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
   }
 
   void MoveBase::planThread(){
-    ROS_DEBUG_NAMED("move_base_plan_thread","Starting planner thread...");
+    ROS_DEBUG_NAMED("move_base","planThread(): Starting planner thread...");
     ros::NodeHandle n;
     ros::Timer timer;
     bool wait_for_wake = false;
@@ -644,7 +648,7 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
       //time to plan! get a copy of the goal and unlock the mutex
       geometry_msgs::PoseStamped temp_goal = planner_goal_;
       lock.unlock();
-      ROS_DEBUG_NAMED("move_base_plan_thread","Planning...");
+      ROS_DEBUG_NAMED("move_base","planThread(): Planning...");
 
       //run planner
       planner_plan_->clear();
@@ -652,11 +656,11 @@ ROS_WARN("MoveBase::makePlan() is called to goal(%f %f) \n this function calls n
 
       if(gotPlan)
       {
-        ROS_DEBUG_NAMED("move_base_plan_thread","Got Plan with %zu points!", planner_plan_->size());
+        ROS_DEBUG_NAMED("move_base","planThread(): Got Plan with %zu points!", planner_plan_->size());
         //pointer swap the plans under mutex (the controller will pull from latest_plan_)
         std::vector<geometry_msgs::PoseStamped>* temp_plan = planner_plan_;
 
-ROS_WARN("@MoveBase::planThread  gotPlan (%d) to the temp_goal (%f %f) \n", gotPlan, temp_goal.pose.position.x, temp_goal.pose.position.y );
+ROS_DEBUG_NAMED("move_base","planThread():  gotPlan (%d) to the temp_goal (%f %f) \n", gotPlan, temp_goal.pose.position.x, temp_goal.pose.position.y );
 
         lock.lock();
         planner_plan_ = latest_plan_;
@@ -665,38 +669,36 @@ ROS_WARN("@MoveBase::planThread  gotPlan (%d) to the temp_goal (%f %f) \n", gotP
         planning_retries_ = 0;
         new_global_plan_ = true;
 
-        ROS_DEBUG_NAMED("move_base_plan_thread","Generated a plan from the base_global_planner");
-
-        //make sure we only start the controller if we still haven't reached the goal
-        if(runPlanner_)
-          state_ = CONTROLLING;
-        if(planner_frequency_ <= 0)
-          runPlanner_ = false;
+        ROS_DEBUG_NAMED("move_base","planThread(): Generated a plan from the base_global_planner");
 
         // in case of previous goal == current goal
-        if( planner_goal_equals_to_prevgoal() )
+        if( planner_goal_equals_to_prevgoal() && recovery_trigger_ == OSCILLATION_R ) // by hankm
         {
     // Probably, we've found a invalid path that passes through an obstacle ( e.g. ) walls )
       	  num_replans_to_the_samegoal++;
-ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_replans_to_the_samegoal );
+ROS_WARN("planThread():  num_replans_to_the_samegoal (%u)  recov trigger: %s \n", num_replans_to_the_samegoal, recovery_trigger_str[recovery_trigger_] );
 
-      	  if( num_replans_to_the_samegoal > 2 )
+      	  if( num_replans_to_the_samegoal > 12  ) // was 3
       	  {
       		  // Tell FrontierDetector to recompute frontier points and the paths to them
       		  std_msgs::Bool recompute_flag;
       		  recompute_flag.data = true ;
       		  recompute_paths_to_frontiers_pub_.publish(recompute_flag);
       		  // publish the current pose as an unreachable frontier
+
+      		ROS_WARN("planThread():  (%f %f) is an unreachable point. publishing it as so \n", planner_goal_.pose.position.x, planner_goal_.pose.position.y );
       		  unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
       		  //m_unreachable_goals.push_back( planner_goal_ );
-            state_ = CLEARING;
+            //state_ = CLEARING; // by hkm
+      		state_ = ABORTING;
+
             runPlanner_ = false;  // proper solution for issue #523
             //publishZeroVelocity();
             // publishRotateVelocity();
-            recovery_trigger_ = PLANNING_R;
+            recovery_trigger_ = ABORTING_R; //PLANNING_R;
 
             //as_->setAborted(move_base_msgs::MoveBaseResult(), "Multiple replaning failure. Setting this point as an unreachable one");
-            ROS_ERROR("Replanning failed for %d times.. changing the state to CLEARING mode \n", num_replans_to_the_samegoal);
+            ROS_ERROR("planThread(): Replanning has failed for %d times.. changing the state to ABORING mode \n", num_replans_to_the_samegoal);
       		  num_replans_to_the_samegoal = 0;
       	  }
         }
@@ -706,16 +708,26 @@ ROS_WARN("@MoveBase::planThread  num_replans_to_the_samegoal (%u) \n", num_repla
         }
         previous_goal_ = planner_goal_ ;
 
+        ///////////////////////////////////////////////////////////
+
+		//make sure we only start the controller if we still haven't reached the goal
+		if(runPlanner_)
+		  state_ = CONTROLLING;
+		if(planner_frequency_ <= 0)
+		  runPlanner_ = false;
+
+
+
         lock.unlock();
       } // if gotplan
 
       //if we didn't get a plan and we are in the planning state (the robot isn't moving)
       else if(state_==PLANNING)
       {
-        ROS_DEBUG_NAMED("move_base_plan_thread","No Plan...");
+        ROS_DEBUG_NAMED("move_base","planThread(): No Plan...");
         ros::Time attempt_end = last_valid_plan_ + ros::Duration(planner_patience_);
 
-ROS_WARN("@MoveBase::planThread failed to find a valid plan. (planning retries)/ (max num retries) (%u) / (%u)\n", (uint32_t)planning_retries_, (uint32_t)max_planning_retries_ );
+ROS_WARN("planThread(): failed to find a valid plan. (planning retries)/ (max num retries) (%u) / (%u)\n", (uint32_t)planning_retries_, (uint32_t)max_planning_retries_ );
 
         //check if we've tried to make a plan for over our time limit or our maximum number of retries
         //issue #496: we stop planning when one of the conditions is true, but if max_planning_retries_
@@ -725,9 +737,9 @@ ROS_WARN("@MoveBase::planThread failed to find a valid plan. (planning retries)/
         if(runPlanner_ &&
            (ros::Time::now() > attempt_end || (uint32_t)planning_retries_ > (uint32_t)max_planning_retries_ ))
         {
-ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base changing the state to CLEARING mode \n", (uint32_t)planning_retries_ );
+ROS_WARN("planThread(): num planning retries reached to (%u).  move_base changing the state to CLEARING mode \n", (uint32_t)planning_retries_ );
 
-  	  	  	  unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
+  	  	  unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
 			  //m_unreachable_goals.push_back( planner_goal_ );
 
 			//pub// by hkm
@@ -911,6 +923,9 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
 
   bool MoveBase::executeCycle(geometry_msgs::PoseStamped& goal)
   {
+ROS_DEBUG("\n=============================================================================\n"
+		"=============================== Begin executeCycle() ============================\n"
+		"=================================================================================\n");
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
     //we need to be able to publish velocity commands
     geometry_msgs::Twist cmd_vel;
@@ -923,8 +938,7 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 // check if the target has covered... ----------> early termination if so
 /////////////////////////////////////////////////////////////////////////////////////////////////////
-    mb_is_goal_covered = is_goal_covered(  goal);
-
+    //mb_is_goal_covered = is_goal_covered(  goal );
 
     //push the feedback out
     move_base_msgs::MoveBaseFeedback feedback;
@@ -932,10 +946,10 @@ ROS_WARN("@MoveBase::planThread num planning retries reached to (%u).  move_base
     as_->publishFeedback(feedback);
 
 ROS_DEBUG("@MoveBase::executeCycle current states: %s / %s \n", move_base::movebase_str[state_], move_base::recovery_trigger_str[recovery_trigger_] );
-ROS_DEBUG_NAMED("move_base", "curr_position/ osci pose (%f %f)/(%f %f)\n",
-		current_position.pose.position.x, current_position.pose.position.y, oscillation_pose_.pose.position.x, oscillation_pose_.pose.position.y );
+
+	double fdist_to_lastocillationpose = distance(current_position, oscillation_pose_) ;
     //check to see if we've moved far enough to reset our oscillation timeout
-    if(distance(current_position, oscillation_pose_) >= oscillation_distance_)
+    if(fdist_to_lastocillationpose >= oscillation_distance_)
     {
     	ROS_DEBUG_NAMED("move_base","the robot is moving forward OK. Therefore, we continuously reset oscillation state \n");
       last_oscillation_reset_ = ros::Time::now(); // this gets updated continuously in normal driving mode. i.e) driving forward with nonzero x speed
@@ -944,6 +958,10 @@ ROS_DEBUG_NAMED("move_base", "curr_position/ osci pose (%f %f)/(%f %f)\n",
       //if our last recovery was caused by oscillation, we want to reset the recovery index 
       if(recovery_trigger_ == OSCILLATION_R)
         recovery_index_ = 0;
+    }
+    else
+    {
+    	ROS_WARN("The robot is within the oscillation distance (%f / %f) \n", fdist_to_lastocillationpose, oscillation_distance_);
     }
 
     //check that the observation buffers for the costmap are current, we don't want to drive blind
@@ -959,8 +977,7 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
     {
 		//make sure to set the new plan flag to false
 		new_global_plan_ = false;
-ROS_INFO("move_base","Got a new plan...swap pointers");
-		ROS_DEBUG_NAMED("move_base","Got a new plan...swap pointers");
+		ROS_DEBUG_NAMED("move_base","Got a new plan from the planThread() ...swap pointers");
 
 		//do a pointer swap under mutex
 		std::vector<geometry_msgs::PoseStamped>* temp_plan = controller_plan_;
@@ -974,7 +991,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 		if(!tc_->setPlan(*controller_plan_))
 		{
 			//ABORT and SHUTDOWN COSTMAPS
-			ROS_ERROR("Failed to pass global plan to the controller, aborting.");
+			ROS_ERROR("Failed to pass global plan to the controller, aborting. \n");
 			resetState();
 
 			//disable the planner thread
@@ -997,20 +1014,20 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 		//if we are in a planning state, then we'll attempt to make a plan
 		case PLANNING:
 		{
-			ROS_DEBUG_NAMED("move_base","state machine: In planning state.");
+			ROS_DEBUG_NAMED("move_base","-- State machine is in Planning state. Asking a plan to the planThread()... --");
 			boost::recursive_mutex::scoped_lock lock(planner_mutex_);
 			runPlanner_ = true;
 			planner_cond_.notify_one();
 		}
-		ROS_DEBUG_NAMED("move_base","Waiting for plan, in the planning state.");
+		//ROS_DEBUG_NAMED("move_base","Waiting for plan, in the planning state.");
 		break;
 
 		//if we're controlling, we'll attempt to find valid velocity commands
 		case CONTROLLING:
-		ROS_DEBUG_NAMED("move_base", "state machine: In controlling state.");
+		ROS_DEBUG_NAMED("move_base", "-- State machine is in Controlling state. --");
 
 		//check to see if we've reached our goal
-		if(tc_->isGoalReached() || mb_is_goal_covered) // by kmhan
+		if(tc_->isGoalReached() ) //|| is_goal_covered(  goal ) ) // by kmhan
 		{
 			ROS_INFO("Goal reached! in controlling \n");
 			resetState();
@@ -1086,7 +1103,7 @@ ROS_INFO("move_base","Got a new plan...swap pointers");
 
 		//we'll try to clear out space with any user-provided recovery behaviors
 		case CLEARING:
-		ROS_DEBUG_NAMED("move_base"," state machine: In clearing/recovery state");
+		ROS_DEBUG_NAMED("move_base","-- State machine is in Clearing/Recovery state --");
 ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : (%d), num recov behavs: : (%d)... \n",
 		recovery_behavior_enabled_	?"true":"false",
 		recovery_index_							   , 	recovery_behaviors_.size() );
@@ -1150,6 +1167,36 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 			ROS_DEBUG_NAMED("move_base_recovery","publishing %f %f as unreachable fpt \n", planner_goal_.pose.position.x, planner_goal_.pose.position.y );
 			unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
 			//m_unreachable_goals.push_back( planner_goal_ );		// by hkm
+
+			resetState();
+			return true;
+		}
+
+		break;
+
+		// giving up the current goal.. hand the control flag over the robot
+		case ABORTING:
+		{
+			boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
+			runPlanner_ = false;
+			lock.unlock();
+
+			ROS_ERROR("ABORT the planning to the current goal !!! \n");
+			if(recovery_trigger_ == CONTROLLING_R)
+			{
+				ROS_ERROR("Aborting because a valid control could not be found. Even after executing all recovery behaviors");
+				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid control. Even after executing recovery behaviors.");
+			}
+			else if(recovery_trigger_ == PLANNING_R)
+			{
+				ROS_ERROR("Aborting because a valid plan could not be found. Even after executing all recovery behaviors");
+				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid plan. Even after executing recovery behaviors.");
+			}
+			else if(recovery_trigger_ == OSCILLATION_R)
+			{
+				ROS_ERROR("Aborting because the robot appears to be oscillating over and over. Even after executing all recovery behaviors");
+				as_->setAborted(move_base_msgs::MoveBaseResult(), "Robot is oscillating. Even after executing recovery behaviors.");
+			}
 
 			resetState();
 			return true;
