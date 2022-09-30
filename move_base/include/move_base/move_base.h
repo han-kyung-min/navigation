@@ -63,6 +63,7 @@
 #include <thread>
 #include <mutex>
 #include <unistd.h>
+#include <random>
 
 namespace move_base {
   //typedefs to help us out with the action server so that we don't hace to type so much
@@ -192,6 +193,8 @@ namespace move_base {
 
       bool isValidPlan( std::vector<geometry_msgs::PoseStamped>& plan );
 
+      void goalexclusivefptsCB(const nav_msgs::Path::ConstPtr& fpts_msg );
+
       tf2_ros::Buffer& tf_;
 
       MoveBaseActionServer* as_;
@@ -212,7 +215,7 @@ namespace move_base {
       uint32_t planning_retries_, num_replans_to_the_samegoal, clearing_retries_ ;
       double conservative_reset_dist_, clearing_radius_;
       ros::Publisher current_goal_pub_, vel_pub_, action_goal_pub_, recompute_paths_to_frontiers_pub_, unreachable_frontier_pub_;
-      ros::Subscriber goal_sub_, done_sub_;
+      ros::Subscriber goal_sub_, done_sub_ , goalexclusive_fpts_sub_;
       ros::ServiceServer make_plan_srv_, clear_costmaps_srv_;
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;
       bool make_plan_clear_costmap_, make_plan_add_unreachable_goal_;
@@ -225,6 +228,8 @@ namespace move_base {
       RecoveryTrigger recovery_trigger_;
 
       ros::Time last_valid_plan_, last_valid_control_, last_oscillation_reset_;
+      ros::Time global_last_osillation_reset_ ;
+
       geometry_msgs::PoseStamped oscillation_pose_;
       pluginlib::ClassLoader<nav_core::BaseGlobalPlanner> bgp_loader_;
       pluginlib::ClassLoader<nav_core::BaseLocalPlanner> blp_loader_;
@@ -256,17 +261,31 @@ namespace move_base {
       bool new_global_plan_;
 
       bool mb_is_goal_covered ;
+      nav_msgs::Path m_goalexclusivefpts;
+
     public:
 
-      inline bool planner_goal_equals_to_prevgoal( )
+//      inline bool planner_goal_equals_to_prevgoal( )
+//      {
+////    	  ROS_WARN("prev/curr goal (%f %f), (%f %f) \n",
+////    			  previous_goal_.pose.position.x, previous_goal_.pose.position.y,
+////				  planner_goal_.pose.position.x, planner_goal_.pose.position.y
+////    	  );
+//
+//    	  float fxdiff = (previous_goal_.pose.position.x - planner_goal_.pose.position.x) ;
+//    	  float fydiff = (previous_goal_.pose.position.y - planner_goal_.pose.position.y) ;
+//    	  return std::sqrt( fxdiff * fxdiff + fydiff * fydiff ) < 0.001 ? true : false;
+//      }
+
+      inline bool equals_to_prevgoal( const geometry_msgs::PoseStamped& in_goal_ )
       {
 //    	  ROS_WARN("prev/curr goal (%f %f), (%f %f) \n",
 //    			  previous_goal_.pose.position.x, previous_goal_.pose.position.y,
 //				  planner_goal_.pose.position.x, planner_goal_.pose.position.y
 //    	  );
 
-    	  float fxdiff = (previous_goal_.pose.position.x - planner_goal_.pose.position.x) ;
-    	  float fydiff = (previous_goal_.pose.position.y - planner_goal_.pose.position.y) ;
+    	  float fxdiff = (previous_goal_.pose.position.x - in_goal_.pose.position.x) ;
+    	  float fydiff = (previous_goal_.pose.position.y - in_goal_.pose.position.y) ;
     	  return std::sqrt( fxdiff * fxdiff + fydiff * fydiff ) < 0.001 ? true : false;
       }
 
@@ -325,9 +344,9 @@ namespace move_base {
     			return false ;
       }
 
+      int selectRandomGoal( geometry_msgs::PoseStamped& goal );
+      int selectNextBestGoal( geometry_msgs::PoseStamped& goal );
       bool is_robot_stuck();
-
-
       bool isDone(){ return isdone; };
       void ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone) ;
   };

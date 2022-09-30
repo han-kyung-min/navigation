@@ -110,6 +110,7 @@ namespace move_base {
     ros::NodeHandle simple_nh("move_base_simple");
     goal_sub_ = simple_nh.subscribe<geometry_msgs::PoseStamped>("goal", 1, boost::bind(&MoveBase::goalCB, this, _1));
     done_sub_ = simple_nh.subscribe("mapping_is_done", 1, &MoveBase::ismappingdoneCB, this );
+    goalexclusive_fpts_sub_ = nh.subscribe("goal_exclusive_frontierpoints_list", 1, &MoveBase::goalexclusivefptsCB, this ) ;
 
     //we'll assume the radius of the robot to be consistent with what's specified for the costmaps
     private_nh.param("local_costmap/inscribed_radius", inscribed_radius_, 0.325);
@@ -193,6 +194,8 @@ namespace move_base {
 
     num_replans_to_the_samegoal = 0;
     clearing_retries_ = 0;
+
+    //global_last_osillation_reset_ = ros::Time::now() ;
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
@@ -625,6 +628,12 @@ namespace move_base {
 	  return true ;
   }
 
+  void MoveBase::goalexclusivefptsCB(const nav_msgs::Path::ConstPtr& fpts_msg )
+  {
+	  m_goalexclusivefpts = *fpts_msg;
+  }
+
+
   void MoveBase::planThread(){
     ROS_DEBUG_NAMED("move_base","planThread(): Starting planner thread...");
     ros::NodeHandle n;
@@ -672,7 +681,7 @@ ROS_DEBUG_NAMED("move_base","planThread():  gotPlan (%d) to the temp_goal (%f %f
         ROS_DEBUG_NAMED("move_base","planThread(): Generated a plan from the base_global_planner");
 
         // in case of previous goal == current goal
-        if( planner_goal_equals_to_prevgoal() && recovery_trigger_ == OSCILLATION_R ) // by hankm
+        if( equals_to_prevgoal(planner_goal_) && recovery_trigger_ == OSCILLATION_R ) // by hankm
         {
     // Probably, we've found a invalid path that passes through an obstacle ( e.g. ) walls )
       	  num_replans_to_the_samegoal++;
@@ -772,13 +781,25 @@ ROS_WARN("planThread(): num planning retries reached to (%u).  move_base changin
 
   void MoveBase::executeCb(const move_base_msgs::MoveBaseGoalConstPtr& move_base_goal)
   {
+
+ROS_DEBUG("\n-------------------------------------------------------------------------\n"
+		"------------------------------- Begin executeCb() ---------------------------\n"
+		"-----------------------------------------------------------------------------\n");
+
     if(!isQuaternionValid(move_base_goal->target_pose.pose.orientation)){
       as_->setAborted(move_base_msgs::MoveBaseResult(), "Aborting on goal because it was sent with an invalid quaternion");
       return;
     }
 
     geometry_msgs::PoseStamped goal = goalToGlobalFrame(move_base_goal->target_pose);
-  
+
+	if(equals_to_prevgoal( goal ) )
+	{
+		ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
+		selectRandomGoal( goal );
+	}
+
+
     publishZeroVelocity();
     //we have a goal so start the planner
     boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
@@ -924,8 +945,8 @@ ROS_WARN("planThread(): num planning retries reached to (%u).  move_base changin
   bool MoveBase::executeCycle(geometry_msgs::PoseStamped& goal)
   {
 ROS_DEBUG("\n=============================================================================\n"
-		"=============================== Begin executeCycle() ============================\n"
-		"=================================================================================\n");
+		    "=============================== Begin executeCycle() ========================\n"
+		    "=============================================================================\n");
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
     //we need to be able to publish velocity commands
     geometry_msgs::Twist cmd_vel;
@@ -1008,6 +1029,9 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 			recovery_index_ = 0;
     }
 
+	bool bisocillating = (oscillation_timeout_ > 0.0) &&
+				(last_oscillation_reset_ + ros::Duration(oscillation_timeout_) < ros::Time::now() );
+	ROS_DEBUG_NAMED("move_base"," is oscillating : %d \n", bisocillating );
 	//the move_base state machine, handles the control logic for navigation
 	switch(state_)
 	{
@@ -1026,8 +1050,9 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 		case CONTROLLING:
 		ROS_DEBUG_NAMED("move_base", "-- State machine is in Controlling state. --");
 
+
 		//check to see if we've reached our goal
-		if(tc_->isGoalReached() ) //|| is_goal_covered(  goal ) ) // by kmhan
+		if(tc_->isGoalReached() && !bisocillating ) //|| is_goal_covered(  goal ) ) // by kmhan
 		{
 			ROS_INFO("Goal reached! in controlling \n");
 			resetState();
@@ -1043,8 +1068,7 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 
 		//ROS_DEBUG_NAMED("move_base", "last oscillation reset, curr time, osci timeout: < %d %d %f >",  last_oscillation_reset_.sec, ros::Time::now().sec, oscillation_timeout_ );
 		//check for an oscillation condition
-		if(oscillation_timeout_ > 0.0 &&
-			last_oscillation_reset_ + ros::Duration(oscillation_timeout_) < ros::Time::now())
+		if(bisocillating)
 		{
 		ROS_DEBUG_NAMED("move_base", "trigger the oscillation recovery \n");
 		  publishZeroVelocity();
@@ -1404,6 +1428,29 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
     return true;
   }
 
+  int MoveBase::selectRandomGoal(geometry_msgs::PoseStamped& goal )
+  {
+	    std::random_device rd; // obtain a random number from hardware
+	    std::mt19937 gen(rd()); // seed the generator
+	    std::uniform_int_distribution<> distr(0, m_goalexclusivefpts.poses.size() ); // define the range
+
+	    int ridx = distr(gen) ;
+	    goal = m_goalexclusivefpts.poses[ridx];
+	    goal.header.frame_id = global_frame_ ;
+	    ROS_WARN("To escape out from the oscillation %d th target (%f %f) is selected instead \n", ridx, goal.pose.position.x, goal.pose.position.y );
+		return 1;
+  }
+
+  int MoveBae::selectNextBestGoal( geometry_msgs::PoseStamped& goal )
+  {
+	  geometry_msgs::PoseStamped init_goal = goal;
+
+	  for(int idx=0; idx < m_goalexclusivefpts.size(); idx++ )
+	  {
+
+	  }
+	  return ;
+  }
 
 	bool MoveBase::is_robot_stuck()
 	{
