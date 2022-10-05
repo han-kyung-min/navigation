@@ -345,7 +345,7 @@ namespace move_base {
       }
 
       int selectRandomGoal( geometry_msgs::PoseStamped& goal );
-      int selectNextBestGoal( geometry_msgs::PoseStamped& goal );
+      int selectNextBestGoalinHorizon( geometry_msgs::PoseStamped& goal, const float& fdisthorizon  );
       bool is_robot_stuck();
       bool isDone(){ return isdone; };
       void ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone) ;

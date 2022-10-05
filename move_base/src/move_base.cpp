@@ -35,7 +35,7 @@
 * Author: Eitan Marder-Eppstein
 *         Mike Phillips (put the planner in its own thread)
 *********************************************************************/
-#include <move_base/move_base.h>
+#include "move_base/move_base.h"
 #include <cmath>
 
 #include <boost/algorithm/string.hpp>
@@ -796,7 +796,8 @@ ROS_DEBUG("\n-------------------------------------------------------------------
 	if(equals_to_prevgoal( goal ) )
 	{
 		ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
-		selectRandomGoal( goal );
+		//selectRandomGoal( goal );
+		selectNextBestGoalinHorizon( goal, 12.f );
 	}
 
 
@@ -1432,7 +1433,7 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
   {
 	    std::random_device rd; // obtain a random number from hardware
 	    std::mt19937 gen(rd()); // seed the generator
-	    std::uniform_int_distribution<> distr(0, m_goalexclusivefpts.poses.size() ); // define the range
+	    std::uniform_int_distribution<> distr(0, m_goalexclusivefpts.poses.size()-1 ); // define the range
 
 	    int ridx = distr(gen) ;
 	    goal = m_goalexclusivefpts.poses[ridx];
@@ -1441,15 +1442,44 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 		return 1;
   }
 
-  int MoveBae::selectNextBestGoal( geometry_msgs::PoseStamped& goal )
+  int MoveBase::selectNextBestGoalinHorizon( geometry_msgs::PoseStamped& goal, const float& fdisthorizon  )
   {
-	  geometry_msgs::PoseStamped init_goal = goal;
+	 std::random_device rd; // obtain a random number from hardware
+	 std::mt19937 gen(rd()); // seed the generator
 
-	  for(int idx=0; idx < m_goalexclusivefpts.size(); idx++ )
+	  geometry_msgs::Point gpt = goal.pose.position;
+	  std::vector<int> indexes_within_horizon ;
+	  for(int idx=0; idx < m_goalexclusivefpts.poses.size(); idx++ )
 	  {
+		  geometry_msgs::Point fpt = m_goalexclusivefpts.poses[idx].pose.position ;
+		  float fdist =  std::sqrt( (gpt.x - fpt.x) * (gpt.x - fpt.x) + (gpt.y - fpt.y) * (gpt.y - fpt.y) ) ;
 
+		  if (fdist <= fdisthorizon)
+		  {
+			  indexes_within_horizon.push_back(idx);
+		  }
 	  }
-	  return ;
+
+	  //ROS_WARN("There are %d alternatives within the planning horizon \n", indexes_within_horizon.size() );
+
+  	 if(indexes_within_horizon.size() > 10 )
+  	 {
+  		std::uniform_int_distribution<> distr(0, indexes_within_horizon.size()-1 ); // define the range
+  		int ridx = distr(gen) ;
+  		int fptidx = indexes_within_horizon[ridx];
+  		goal = m_goalexclusivefpts.poses[fptidx];
+  	  	ROS_WARN("To escape out from the oscillation %d th target (%f %f) within horizon (%f) is selected instead \n", fptidx, goal.pose.position.x, goal.pose.position.y, fdisthorizon );
+  	 }
+  	 else
+  	 {
+ 	    std::uniform_int_distribution<> distr(0, m_goalexclusivefpts.poses.size()-1 ); // define the range
+ 	    int ridx = distr(gen) ;
+ 	    goal = m_goalexclusivefpts.poses[ridx];
+ 	  	ROS_WARN("To escape out from the oscillation %d th target (%f %f) is selected instead \n", ridx, goal.pose.position.x, goal.pose.position.y );
+
+  	 }
+
+	  return 1;
   }
 
 	bool MoveBase::is_robot_stuck()
