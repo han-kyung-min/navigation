@@ -339,12 +339,12 @@ namespace navfn {
 
       if (len > 0)			// found plan
       {
-        ROS_WARN("[NavFn Astar] Path found, %d steps\n", len);
+        ROS_INFO("[NavFn Astar] Path found, %d steps\n", len);
         return true;
       }
       else
       {
-        ROS_ERROR("[NavFn Astar] No path found\n");
+    	ROS_WARN("[NavFn Astar] No path found\n");
         return false;
       }
     }

@@ -40,6 +40,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/thread.hpp>
+#include <boost/format.hpp>
 
 #include <geometry_msgs/Twist.h>
 
@@ -56,7 +57,8 @@ namespace move_base {
     blp_loader_("nav_core", "nav_core::BaseLocalPlanner"), 
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
-    runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false), isdone(false)
+    runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false), isdone(false),
+	mu_debug_cbidx(0), mu_debug_cycidx(0)
   {
 
     as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base", boost::bind(&MoveBase::executeCb, this, _1), false);
@@ -493,7 +495,7 @@ namespace move_base {
 
   bool MoveBase::makePlan(const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan){
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(planner_costmap_ros_->getCostmap()->getMutex()));
-    ROS_DEBUG_NAMED("move_base","MoveBase::makePlan() is called to goal(%f %f) \n this function calls navfnROS::makePlan()", goal.pose.position.x, goal.pose.position.y );
+    ROS_DEBUG_NAMED("move_base","MoveBase::makePlan() is called to goal(%f %f). Subsequently, this function calls navfnROS::makePlan()", goal.pose.position.x, goal.pose.position.y );
     //make sure to set the plan to be empty initially
     plan.clear();
 
@@ -669,6 +671,7 @@ namespace move_base {
         //pointer swap the plans under mutex (the controller will pull from latest_plan_)
         std::vector<geometry_msgs::PoseStamped>* temp_plan = planner_plan_;
 
+
 ROS_DEBUG_NAMED("move_base","planThread():  gotPlan (%d) to the temp_goal (%f %f) \n", gotPlan, temp_goal.pose.position.x, temp_goal.pose.position.y );
 
         lock.lock();
@@ -678,7 +681,8 @@ ROS_DEBUG_NAMED("move_base","planThread():  gotPlan (%d) to the temp_goal (%f %f
         planning_retries_ = 0;
         new_global_plan_ = true;
 
-        ROS_DEBUG_NAMED("move_base","planThread(): Generated a plan from the base_global_planner");
+        //ROS_DEBUG_NAMED("move_base","planThread(): Generated a plan from the base_global_planner");
+
 
         // in case of previous goal == current goal
         if( equals_to_prevgoal(planner_goal_) && recovery_trigger_ == OSCILLATION_R ) // by hankm
@@ -725,42 +729,45 @@ ROS_WARN("planThread():  num_replans_to_the_samegoal (%u)  recov trigger: %s \n"
 		if(planner_frequency_ <= 0)
 		  runPlanner_ = false;
 
-
-
         lock.unlock();
       } // if gotplan
 
-      //if we didn't get a plan and we are in the planning state (the robot isn't moving)
-      else if(state_==PLANNING)
+      else
       {
-        ROS_DEBUG_NAMED("move_base","planThread(): No Plan...");
-        ros::Time attempt_end = last_valid_plan_ + ros::Duration(planner_patience_);
+    	  ROS_WARN("planThread(): failed to find a valid plan !!!" );
 
-ROS_WARN("planThread(): failed to find a valid plan. (planning retries)/ (max num retries) (%u) / (%u)\n", (uint32_t)planning_retries_, (uint32_t)max_planning_retries_ );
+		  //if we didn't get a plan and we are in the planning state (the robot isn't moving)
+		  if(state_==PLANNING)
+		  {
+			ROS_DEBUG_NAMED("move_base","planThread(): No Plan...");
+			ros::Time attempt_end = last_valid_plan_ + ros::Duration(planner_patience_);
 
-        //check if we've tried to make a plan for over our time limit or our maximum number of retries
-        //issue #496: we stop planning when one of the conditions is true, but if max_planning_retries_
-        //is negative (the default), it is just ignored and we have the same behavior as ever
-        lock.lock();
-        planning_retries_++;
-        if(runPlanner_ &&
-           (ros::Time::now() > attempt_end || (uint32_t)planning_retries_ > (uint32_t)max_planning_retries_ ))
-        {
-ROS_WARN("planThread(): num planning retries reached to (%u).  move_base changing the state to CLEARING mode \n", (uint32_t)planning_retries_ );
+	ROS_WARN("planThread(): failed to find a valid plan. (planning retries)/ (max num retries) (%u) / (%u)\n", (uint32_t)planning_retries_, (uint32_t)max_planning_retries_ );
 
-  	  	  unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
-			  //m_unreachable_goals.push_back( planner_goal_ );
+			//check if we've tried to make a plan for over our time limit or our maximum number of retries
+			//issue #496: we stop planning when one of the conditions is true, but if max_planning_retries_
+			//is negative (the default), it is just ignored and we have the same behavior as ever
+			lock.lock();
+			planning_retries_++;
+			if(runPlanner_ &&
+			   (ros::Time::now() > attempt_end || (uint32_t)planning_retries_ > (uint32_t)max_planning_retries_ ))
+			{
+	ROS_WARN("planThread(): num planning retries reached to (%u).  move_base changing the state to CLEARING mode \n", (uint32_t)planning_retries_ );
 
-			//pub// by hkm
-          //we'll move into our obstacle clearing mode
-          state_ = CLEARING;
-          runPlanner_ = false;  // proper solution for issue #523
-         // publishZeroVelocity();
-         // publishRotateVelocity();
-          recovery_trigger_ = PLANNING_R;
-        }
+			  unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
+				  //m_unreachable_goals.push_back( planner_goal_ );
 
-        lock.unlock();
+				//pub// by hkm
+			  //we'll move into our obstacle clearing mode
+			  state_ = CLEARING;
+			  runPlanner_ = false;  // proper solution for issue #523
+			 // publishZeroVelocity();
+			 // publishRotateVelocity();
+			  recovery_trigger_ = PLANNING_R;
+			}
+
+			lock.unlock();
+		  }
       }
 
       //take the mutex for the next iteration
@@ -793,12 +800,12 @@ ROS_DEBUG("\n-------------------------------------------------------------------
 
     geometry_msgs::PoseStamped goal = goalToGlobalFrame(move_base_goal->target_pose);
 
-	if(equals_to_prevgoal( goal ) )
-	{
-		ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
-		//selectRandomGoal( goal );
-		selectNextBestGoalinHorizon( goal, 12.f );
-	}
+//	if(equals_to_prevgoal( goal ) )
+//	{
+//		ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
+//		//selectRandomGoal( goal );
+//		selectNextBestGoalinHorizon( goal, 12.f );
+//	}
 
 
     publishZeroVelocity();
@@ -909,14 +916,45 @@ ROS_DEBUG("\n-------------------------------------------------------------------
       //for timing that gives real time even in simulation
       ros::WallTime start = ros::WallTime::now();
 
+
+      std::string str_localplan  = (boost::format("/media/data/results/move_base/ec_localplan%04d_%04d.txt") %mu_debug_cbidx % mu_debug_cycidx ).str() ;
+      std::string str_status  = (boost::format("/media/data/results/move_base/ec_status%04d_%04d.txt") %mu_debug_cbidx % mu_debug_cycidx ).str() ;
+      std::string str_recovery  = (boost::format("/media/data/results/move_base/ec_recovery%04d_%04d.txt") %mu_debug_cbidx % mu_debug_cycidx ).str() ;
+
+      mofs_localplan  = std::ofstream(str_localplan);
+//      mofs_status = std::ofstream(str_status) ;
+//      mofs_globalplan = ofstream(ofs_);
+
+      // save costmap
+      std::string costmapfile = (boost::format("/media/data/results/move_base/costmap%04d.txt") % mu_debug_cbidx  ).str();
+      std::string costmapfileinfo = (boost::format("/media/data/results/move_base/cminfo%04d.txt") % mu_debug_cbidx  ).str();
+
+//get the starting pose of the robot
+geometry_msgs::PoseStamped global_pose;
+getRobotPose(global_pose, planner_costmap_ros_) ;
+saveMap(costmapfileinfo, costmapfile, global_pose );
+
+ROS_DEBUG("processing %d th executeCycle() \n", mu_debug_cbidx  );
+ROS_DEBUG("start: (%f %f) to goal: (%f %f) \n", global_pose.pose.position.x, global_pose.pose.position.y, goal.pose.position.x, goal.pose.position.y  );
+
       //the real work on pursuing a goal is done here
       bool done = executeCycle(goal);
 
+mofs_localplan.close() ;
+//mofs_status.close() ;
+
+      mu_debug_cycidx++;
       //if we're done, then we'll return from execute
       if(done)
+      {
+    	  mu_debug_cbidx++;
+    	  mu_debug_cycidx = 0;
         return;
-
+      }
       //check if execution of the goal has completed in some way
+
+
+//      str_recovery.close() ;
 
       ros::WallDuration t_diff = ros::WallTime::now() - start;
       ROS_DEBUG_NAMED("move_base","Full control cycle time: %.9f\n", t_diff.toSec());
@@ -926,6 +964,7 @@ ROS_DEBUG("\n-------------------------------------------------------------------
       if(r.cycleTime() > ros::Duration(1 / controller_frequency_) && state_ == CONTROLLING)
         ROS_WARN("Control loop missed its desired rate of %.4fHz... the loop actually took %.4f seconds", controller_frequency_, r.cycleTime().toSec());
     }
+
 
     //wake up the planner thread so that it can exit cleanly
     lock.lock();
@@ -983,7 +1022,7 @@ ROS_DEBUG("@MoveBase::executeCycle current states: %s / %s \n", move_base::moveb
     }
     else
     {
-    	ROS_WARN("The robot is within the oscillation distance (%f / %f) \n", fdist_to_lastocillationpose, oscillation_distance_);
+    	ROS_WARN("The robot is within the oscillation distance (%f / %f) (in terms of the distance) \n", fdist_to_lastocillationpose, oscillation_distance_);
     }
 
     //check that the observation buffers for the costmap are current, we don't want to drive blind
@@ -991,6 +1030,8 @@ ROS_DEBUG("@MoveBase::executeCycle current states: %s / %s \n", move_base::moveb
     {
 ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding of the base for safety",ros::this_node::getName().c_str());
       publishZeroVelocity();
+
+	  ROS_DEBUG("\n=============================== End of executeCycle() =========================\n");
       return false;
     }
 
@@ -1000,6 +1041,16 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 		//make sure to set the new plan flag to false
 		new_global_plan_ = false;
 		ROS_DEBUG_NAMED("move_base","Got a new plan from the planThread() ...swap pointers");
+
+		// cp local plan
+		mofs_localplan << global_pose.pose.position.x << " " << global_pose.pose.position.y << std::endl;
+		for(int ii =0; ii < latest_plan_->size(); ii++ )
+		{
+			mofs_localplan << (*latest_plan_)[ii].pose.position.x << " " << (*latest_plan_)[ii].pose.position.y << std::endl;
+		}
+		ROS_WARN("done \n");
+		mofs_localplan << goal.pose.position.x << " " << goal.pose.position.y << std::endl;
+		mofs_localplan << std::endl;
 
 		//do a pointer swap under mutex
 		std::vector<geometry_msgs::PoseStamped>* temp_plan = controller_plan_;
@@ -1022,6 +1073,7 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 			lock.unlock();
 
 			as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to pass global plan to the controller.");
+			ROS_DEBUG("\n=============================== End of executeCycle() =========================\n");
 			return true;
 		}
 
@@ -1032,7 +1084,7 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 
 	bool bisocillating = (oscillation_timeout_ > 0.0) &&
 				(last_oscillation_reset_ + ros::Duration(oscillation_timeout_) < ros::Time::now() );
-	ROS_DEBUG_NAMED("move_base"," is oscillating : %d \n", bisocillating );
+	ROS_DEBUG_NAMED("move_base"," Robot is %s oscillating in terms of the time \n",  bisocillating == true ? " " : "NOT"  );
 	//the move_base state machine, handles the control logic for navigation
 	switch(state_)
 	{
@@ -1051,7 +1103,6 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 		case CONTROLLING:
 		ROS_DEBUG_NAMED("move_base", "-- State machine is in Controlling state. --");
 
-
 		//check to see if we've reached our goal
 		if(tc_->isGoalReached() && !bisocillating ) //|| is_goal_covered(  goal ) ) // by kmhan
 		{
@@ -1064,6 +1115,7 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 			lock.unlock();
 
 			as_->setSucceeded(move_base_msgs::MoveBaseResult(), "Goal reached.");
+			ROS_DEBUG("\n=============================== End of executeCycle() b/c Goal reached ============\n");
 			return true;
 		}
 
@@ -1093,7 +1145,7 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 
 			else
 			{
-				ROS_DEBUG_NAMED("move_base", "The local planner could not find a valid plan.");
+				ROS_DEBUG_NAMED("move_base", "The local planner could not find a valid control cmd_vel.");
 				ros::Time attempt_end = last_valid_control_ + ros::Duration(controller_patience_);
 
 				//check if we've tried to find a valid control for longer than our time limit
@@ -1194,6 +1246,7 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 			//m_unreachable_goals.push_back( planner_goal_ );		// by hkm
 
 			resetState();
+			ROS_DEBUG("\n=============================== End of executeCycle() =========================\n");
 			return true;
 		}
 
@@ -1224,6 +1277,7 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 			}
 
 			resetState();
+			ROS_DEBUG("\n=============================== End of executeCycle() =========================\n");
 			return true;
 		}
 
@@ -1239,6 +1293,9 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 		return true;
 
 	} // switch state_
+
+
+	ROS_DEBUG("\n=============================== End of executeCycle() =========================\n");
 
     //we aren't done yet
     return false;
@@ -1521,6 +1578,48 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 		  publishZeroVelocity();
 		  isdone = true;
 	  }
+  }
+
+
+
+  void MoveBase::saveMap( const std::string& infofilename, const std::string& mapfilename, const geometry_msgs::PoseStamped& goal )
+  {
+
+	  costmap_2d::Costmap2D* pocostmap = planner_costmap_ros_->getCostmap();
+		geometry_msgs::PoseStamped robotpose;
+		getRobotPose(robotpose, planner_costmap_ros_);
+
+		float wx_r = (float)robotpose.pose.position.x ;
+		float wy_r = (float)robotpose.pose.position.y ;
+	    float wx_g = (float)goal.pose.position.x ;
+	    float wy_g = (float)goal.pose.position.y ;
+	    uint32_t mx_r, my_r, mx_g, my_g;
+	    pocostmap->worldToMap(wx_r, wy_r, mx_r, my_r);
+	    pocostmap->worldToMap(wx_g, wy_g, mx_g, my_g);
+
+		int nwidth  = (int)pocostmap->getSizeInCellsX() ;
+		int nheight = (int)pocostmap->getSizeInCellsY() ;
+		float fox = (float)pocostmap->getOriginX() ;
+		float foy = (float)pocostmap->getOriginY() ;
+		float fres = (float)pocostmap->getResolution() ;
+
+
+		std::ofstream ofs_info( infofilename );
+		std::ofstream ofs_map(mapfilename);
+
+		ofs_info << nwidth << " " << nheight << " " << fox << " " << foy << " " << fres << " " <<
+				robotpose.pose.position.x << " " << robotpose.pose.position.y << std::endl;
+
+		for( int ii=0; ii < nheight; ii++ )
+		{
+			for( int jj=0; jj < nwidth; jj++ )
+			{
+				uint32_t val = static_cast<uint32_t>( pocostmap->getCost(jj,ii) ) ;
+				ofs_map << val << " ";
+			}
+			ofs_map << "\n";
+		}
+		ofs_map.close();
   }
 
 };

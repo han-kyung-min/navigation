@@ -204,7 +204,7 @@ namespace navfn {
       ROS_ERROR("This planner has not been initialized yet, but it is being used, please call initialize() before use");
       return false;
     }
-ROS_DEBUG_NAMED("navfn_ros","NavfnROS::makePlan() is called to find a plan from (%f %f) to the goal (%f %f) \n",
+ROS_DEBUG("NavfnROS::makePlan() is called to find a plan from (%f %f) to the goal (%f %f) \n",
 		start.pose.position.x, start.pose.position.y, goal.pose.position.x, goal.pose.position.y );
     //clear the plan, just in case
     plan.clear();
@@ -267,6 +267,11 @@ ROS_DEBUG_NAMED("navfn_ros","NavfnROS::makePlan() is called to find a plan from 
     planner_->setGoal(map_start);
 
     bool success = planner_->calcNavFnAstar();
+    if( !success)
+    {
+    	ROS_WARN("NavfnROS::makePlan() calcNavFnAstar() has failed \n");
+    	return false;
+    }
     //bool success = planner_->calcNavFnDijkstra(true);
 
     double resolution = costmap_->getResolution();
@@ -300,10 +305,15 @@ ROS_DEBUG_NAMED("navfn_ros","NavfnROS::makePlan() is called to find a plan from 
         geometry_msgs::PoseStamped goal_copy = best_pose;
         goal_copy.header.stamp = ros::Time::now();
         plan.push_back(goal_copy);
+        ROS_DEBUG("NavfnROS::makePlan() has found a legal plan %d length \n", plan.size() );
       }
       else{
-        ROS_ERROR("Failed to get a plan from potential when a legal potential was found. This shouldn't happen.");
+        ROS_ERROR("NavfnROS::makePlan() Failed to get a plan from potential when a legal potential was found. This shouldn't happen.");
       }
+    }
+    else{
+    	ROS_WARN("NavfnROS::makePlan() Couldn't find any legal plan \n");
+    	return false;
     }
 
     if (visualize_potential_)

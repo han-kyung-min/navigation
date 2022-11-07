@@ -263,6 +263,14 @@ namespace move_base {
       bool mb_is_goal_covered ;
       nav_msgs::Path m_goalexclusivefpts;
 
+      std::ofstream mofs_move_base ;
+      uint32_t mu_debug_cbidx ;
+      uint32_t mu_debug_cycidx ;
+
+      std::ofstream mofs_localplan ;
+      std::ofstream mofs_recovery ;
+      std::ofstream mofs_status ;
+
     public:
 
 //      inline bool planner_goal_equals_to_prevgoal( )
@@ -305,37 +313,40 @@ namespace move_base {
 
     	    float r2gdist_world = std::sqrt( (wx_r - wx_g) * (wx_r - wx_g) + (wy_r - wy_g) * (wy_r - wy_g) ) ;
 
-// pocostmap->saveMap(std::string("/media/hankm/mydata/results/explore_bench/costmap_ros.txt"));
+ //pocostmap->saveMap(std::string("/media/hankm/mydata/results/explore_bench/costmap_ros.txt"));
     		// 0	1	2
-    		// 3		5
+    		// 3	4	5
     		// 6	7	8
     	    //int x0, x1, x2, x3, x5, x6, x7, x8, y0, y1, y2, y3, y5, y6, y7, y8;
-    		uint8_t c0 = pocostmap->getCost( mx_r - 1	,	my_r - 1 );
-    		uint8_t c1 = pocostmap->getCost( mx_r		,	my_r - 1 );
-    		uint8_t c2 = pocostmap->getCost( mx_r + 1	,	my_r - 1 );
+//    		uint8_t c0 = pocostmap->getCost( mx_r - 1	,	my_r - 1 );
+//    		uint8_t c1 = pocostmap->getCost( mx_r		,	my_r - 1 );
+//    		uint8_t c2 = pocostmap->getCost( mx_r + 1	,	my_r - 1 );
+//
+//    		uint8_t c3 = pocostmap->getCost( mx_r - 1	,  my_r ) ;
+//    		uint8_t c4 = pocostmap->getCost( mx_r		,  my_r ) ;
+//    		uint8_t c5 = pocostmap->getCost( mx_r + 1	,  my_r ) ;
+//
+//    		uint8_t c6 = pocostmap->getCost( mx_r - 1	,  my_r + 1);
+//    		uint8_t c7 = pocostmap->getCost( mx_r		,  my_r + 1);
+//    		uint8_t c8 = pocostmap->getCost( mx_r + 1	,  my_r + 1);
 
-    		uint8_t c3 = pocostmap->getCost( mx_r - 1	,  my_r ) ;
-    		uint8_t c4 = pocostmap->getCost( mx_r		,  my_r ) ;
-    		uint8_t c5 = pocostmap->getCost( mx_r + 1	,  my_r ) ;
-
-    		uint8_t c6 = pocostmap->getCost( mx_r - 1	,  my_r + 1);
-    		uint8_t c7 = pocostmap->getCost( mx_r		,  my_r + 1);
-    		uint8_t c8 = pocostmap->getCost( mx_r + 1	,  my_r + 1);
+    	    uint32_t c4 = static_cast<uint32_t>( pocostmap->getCost( mx_r, my_r ) ) ;
 
 //    		ROS_WARN("mx my wx wy ox oy res: %d %d %f %f %f %f \n", mx, my, wx, wy, pocostmap->getOriginX(), pocostmap->getOriginY(), pocostmap->getResolution() );
 
-    		if (r2gdist_world < 1.1)
+    		if (r2gdist_world < 1.0)
     		{
-				if( (c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 ) ) // UNKNOWN == 255
-					return false ;
+//				if( (c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 ) ) // UNKNOWN == 255
+//					return false ;
+    			if( c4 == 255 )
+    				return false ;
 				else
 				{
-					ROS_ERROR("This input goal (%f %f) point has already been covered on the map \n", wx_g, wy_g );
-					ROS_ERROR("costmap %d %d %f %f \n", pocostmap->getSizeInCellsX(),pocostmap->getSizeInCellsY(),
-														pocostmap->getOriginX(),pocostmap->getOriginY()
-
-					);
-			   		ROS_ERROR("\n %u %u %u \n %u %u %u \n %u %u %u \n", c0, c1, c2, c3, c4, c5, c6, c7, c8);
+					ROS_DEBUG("This input goal (%f %f) point has already been covered on the map \n", wx_g, wy_g );
+//					ROS_ERROR("costmap %d %d %f %f \n", pocostmap->getSizeInCellsX(),pocostmap->getSizeInCellsY(),
+//														pocostmap->getOriginX(),pocostmap->getOriginY()
+//					);
+			   		//ROS_ERROR("\n %u %u %u \n %u %u %u \n %u %u %u \n", c0, c1, c2, c3, c4, c5, c6, c7, c8);
 
 					true;
 				}
@@ -349,6 +360,8 @@ namespace move_base {
       bool is_robot_stuck();
       bool isDone(){ return isdone; };
       void ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone) ;
+      void saveMap( const std::string& infofilename, const std::string& mapfilename, const geometry_msgs::PoseStamped& goal );
+
   };
 };
 #endif
