@@ -334,7 +334,7 @@ namespace move_base {
 
 //    		ROS_WARN("mx my wx wy ox oy res: %d %d %f %f %f %f \n", mx, my, wx, wy, pocostmap->getOriginX(), pocostmap->getOriginY(), pocostmap->getResolution() );
 
-    		if (r2gdist_world < 1.0)
+    		if (r2gdist_world < 2.0)
     		{
 //				if( (c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 ) ) // UNKNOWN == 255
 //					return false ;
@@ -351,8 +351,9 @@ namespace move_base {
 					true;
 				}
     		}
-    		else
-    			return false ;
+
+
+    		return false ;
       }
 
       int selectRandomGoal( geometry_msgs::PoseStamped& goal );

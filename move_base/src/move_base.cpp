@@ -1104,7 +1104,7 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 		ROS_DEBUG_NAMED("move_base", "-- State machine is in Controlling state. --");
 
 		//check to see if we've reached our goal
-		if(tc_->isGoalReached() && !bisocillating ) //|| is_goal_covered(  goal ) ) // by kmhan
+		if( (tc_->isGoalReached() && !bisocillating) ) //|| is_goal_covered(  goal ) ) // by kmhan
 		{
 			ROS_INFO("Goal reached! in controlling \n");
 			resetState();
