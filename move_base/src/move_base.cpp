@@ -198,6 +198,7 @@ namespace move_base {
     clearing_retries_ = 0;
 
     //global_last_osillation_reset_ = ros::Time::now() ;
+
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
@@ -800,12 +801,12 @@ ROS_DEBUG("\n-------------------------------------------------------------------
 
     geometry_msgs::PoseStamped goal = goalToGlobalFrame(move_base_goal->target_pose);
 
-//	if(equals_to_prevgoal( goal ) )
-//	{
-//		ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
-//		//selectRandomGoal( goal );
-//		selectNextBestGoalinHorizon( goal, 12.f );
-//	}
+	if(equals_to_prevgoal( goal ) )
+	{
+		ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
+		selectRandomGoal( goal );
+		//selectNextBestGoalinHorizon( goal, 12.f );
+	}
 
 
     publishZeroVelocity();
@@ -916,41 +917,14 @@ ROS_DEBUG("\n-------------------------------------------------------------------
       //for timing that gives real time even in simulation
       ros::WallTime start = ros::WallTime::now();
 
-
-      std::string str_localplan  = (boost::format("/media/data/results/move_base/ec_localplan%04d_%04d.txt") %mu_debug_cbidx % mu_debug_cycidx ).str() ;
-      std::string str_status  = (boost::format("/media/data/results/move_base/ec_status%04d_%04d.txt") %mu_debug_cbidx % mu_debug_cycidx ).str() ;
-      std::string str_recovery  = (boost::format("/media/data/results/move_base/ec_recovery%04d_%04d.txt") %mu_debug_cbidx % mu_debug_cycidx ).str() ;
-
-      mofs_localplan  = std::ofstream(str_localplan);
-//      mofs_status = std::ofstream(str_status) ;
-//      mofs_globalplan = ofstream(ofs_);
-
-      // save costmap
-      std::string costmapfile = (boost::format("/media/data/results/move_base/costmap%04d.txt") % mu_debug_cbidx  ).str();
-      std::string costmapfileinfo = (boost::format("/media/data/results/move_base/cminfo%04d.txt") % mu_debug_cbidx  ).str();
-
-//get the starting pose of the robot
-geometry_msgs::PoseStamped global_pose;
-getRobotPose(global_pose, planner_costmap_ros_) ;
-saveMap(costmapfileinfo, costmapfile, global_pose );
-
-ROS_DEBUG("processing %d th executeCycle() \n", mu_debug_cbidx  );
-ROS_DEBUG("start: (%f %f) to goal: (%f %f) \n", global_pose.pose.position.x, global_pose.pose.position.y, goal.pose.position.x, goal.pose.position.y  );
-
       //the real work on pursuing a goal is done here
       bool done = executeCycle(goal);
 
-mofs_localplan.close() ;
+
 //mofs_status.close() ;
 
-      mu_debug_cycidx++;
       //if we're done, then we'll return from execute
-      if(done)
-      {
-    	  mu_debug_cbidx++;
-    	  mu_debug_cycidx = 0;
-        return;
-      }
+
       //check if execution of the goal has completed in some way
 
 
@@ -1043,14 +1017,6 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 		ROS_DEBUG_NAMED("move_base","Got a new plan from the planThread() ...swap pointers");
 
 		// cp local plan
-		mofs_localplan << global_pose.pose.position.x << " " << global_pose.pose.position.y << std::endl;
-		for(int ii =0; ii < latest_plan_->size(); ii++ )
-		{
-			mofs_localplan << (*latest_plan_)[ii].pose.position.x << " " << (*latest_plan_)[ii].pose.position.y << std::endl;
-		}
-		ROS_WARN("done \n");
-		mofs_localplan << goal.pose.position.x << " " << goal.pose.position.y << std::endl;
-		mofs_localplan << std::endl;
 
 		//do a pointer swap under mutex
 		std::vector<geometry_msgs::PoseStamped>* temp_plan = controller_plan_;

@@ -268,8 +268,12 @@ namespace move_base {
       uint32_t mu_debug_cycidx ;
 
       std::ofstream mofs_localplan ;
-      std::ofstream mofs_recovery ;
+      std::ofstream mofs_robotpose ;
       std::ofstream mofs_status ;
+      std::ofstream mofs_localcm ;
+      std::ofstream mofs_globalcm ;
+      std::ofstream mofs_localcm_info ;
+      std::ofstream mofs_globalcm_info ;
 
     public:
 
