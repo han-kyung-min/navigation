@@ -1207,21 +1207,22 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 			lock.unlock();
 
 			ROS_ERROR("ABORT the planning to the current goal !!! \n");
-			if(recovery_trigger_ == CONTROLLING_R)
-			{
-				ROS_ERROR("Aborting because a valid control could not be found. Even after executing all recovery behaviors");
-				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid control. Even after executing recovery behaviors.");
-			}
-			else if(recovery_trigger_ == PLANNING_R)
-			{
-				ROS_ERROR("Aborting because a valid plan could not be found. Even after executing all recovery behaviors");
-				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid plan. Even after executing recovery behaviors.");
-			}
-			else if(recovery_trigger_ == OSCILLATION_R)
-			{
-				ROS_ERROR("Aborting because the robot appears to be oscillating over and over. Even after executing all recovery behaviors");
-				as_->setAborted(move_base_msgs::MoveBaseResult(), "Robot is oscillating. Even after executing recovery behaviors.");
-			}
+			as_->setAborted(move_base_msgs::MoveBaseResult(), "PlanThread() stuck at multiple replanning to the same goal ! \n");
+//			if(recovery_trigger_ == CONTROLLING_R)
+//			{
+//				ROS_ERROR("Aborting because a valid control could not be found. Even after executing all recovery behaviors");
+//				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid control. Even after executing recovery behaviors.");
+//			}
+//			else if(recovery_trigger_ == PLANNING_R)
+//			{
+//				ROS_ERROR("Aborting because a valid plan could not be found. Even after executing all recovery behaviors");
+//				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid plan. Even after executing recovery behaviors.");
+//			}
+//			else if(recovery_trigger_ == OSCILLATION_R)
+//			{
+//				ROS_ERROR("Aborting because the robot appears to be oscillating over and over. Even after executing all recovery behaviors");
+//				as_->setAborted(move_base_msgs::MoveBaseResult(), "Robot is oscillating. Even after executing recovery behaviors.");
+//			}
 
 			resetState();
 			return true;
