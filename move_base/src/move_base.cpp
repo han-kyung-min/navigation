@@ -198,7 +198,6 @@ namespace move_base {
     clearing_retries_ = 0;
 
     //global_last_osillation_reset_ = ros::Time::now() ;
-
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
@@ -803,9 +802,10 @@ ROS_DEBUG("\n-------------------------------------------------------------------
 
 	if(equals_to_prevgoal( goal ) )
 	{
-		ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
-		selectRandomGoal( goal );
-		//selectNextBestGoalinHorizon( goal, 12.f );
+			ROS_ERROR("Curr Goal (%f %f) is equivalent to the previous goal !!! \n Possible oscillation  !!! \n", goal.pose.position.x, goal.pose.position.y );
+			//selectRandomGoal( goal );
+			recordMovebaseStatus( goal, 0 ) ;
+		selectNextBestGoalinHorizon( goal, 12.f );
 	}
 
 
@@ -920,11 +920,11 @@ ROS_DEBUG("\n-------------------------------------------------------------------
       //the real work on pursuing a goal is done here
       bool done = executeCycle(goal);
 
-
-//mofs_status.close() ;
-
       //if we're done, then we'll return from execute
-
+      if(done)
+      {
+        return;
+      }
       //check if execution of the goal has completed in some way
 
 
@@ -1016,8 +1016,6 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 		new_global_plan_ = false;
 		ROS_DEBUG_NAMED("move_base","Got a new plan from the planThread() ...swap pointers");
 
-		// cp local plan
-
 		//do a pointer swap under mutex
 		std::vector<geometry_msgs::PoseStamped>* temp_plan = controller_plan_;
 
@@ -1070,9 +1068,9 @@ ROS_WARN("[%s]:Sensor data is out of date, we're not going to allow commanding o
 		ROS_DEBUG_NAMED("move_base", "-- State machine is in Controlling state. --");
 
 		//check to see if we've reached our goal
-		if( (tc_->isGoalReached() && !bisocillating) ) //|| is_goal_covered(  goal ) ) // by kmhan
+		if(tc_->isGoalReached() && !bisocillating || is_goal_covered(  goal ) ) // by kmhan
 		{
-			ROS_INFO("Goal reached! in controlling \n");
+			ROS_INFO("Goal reached while controlling the base! \t Finishing up this move_base task. \n");
 			resetState();
 
 			//disable the planner thread
@@ -1208,6 +1206,9 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 			// Remark the current pt as unreachable frontier and publish it accoordingly.
 			// We should not consider this pt no logner !!! hkm (22.8.9)
 			ROS_DEBUG_NAMED("move_base_recovery","publishing %f %f as unreachable fpt \n", planner_goal_.pose.position.x, planner_goal_.pose.position.y );
+
+	recordMovebaseStatus( planner_goal_, 1 ) ;
+
 			unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
 			//m_unreachable_goals.push_back( planner_goal_ );		// by hkm
 
@@ -1226,21 +1227,22 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 			lock.unlock();
 
 			ROS_ERROR("ABORT the planning to the current goal !!! \n");
-			if(recovery_trigger_ == CONTROLLING_R)
-			{
-				ROS_ERROR("Aborting because a valid control could not be found. Even after executing all recovery behaviors");
-				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid control. Even after executing recovery behaviors.");
-			}
-			else if(recovery_trigger_ == PLANNING_R)
-			{
-				ROS_ERROR("Aborting because a valid plan could not be found. Even after executing all recovery behaviors");
-				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid plan. Even after executing recovery behaviors.");
-			}
-			else if(recovery_trigger_ == OSCILLATION_R)
-			{
-				ROS_ERROR("Aborting because the robot appears to be oscillating over and over. Even after executing all recovery behaviors");
-				as_->setAborted(move_base_msgs::MoveBaseResult(), "Robot is oscillating. Even after executing recovery behaviors.");
-			}
+			as_->setAborted(move_base_msgs::MoveBaseResult(), "PlanThread() has failed multiple times \n");
+//			if(recovery_trigger_ == CONTROLLING_R)
+//			{
+//				ROS_ERROR("Aborting because a valid control could not be found. Even after executing all recovery behaviors");
+//				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid control. Even after executing recovery behaviors.");
+//			}
+//			else if(recovery_trigger_ == PLANNING_R)
+//			{
+//				ROS_ERROR("Aborting because a valid plan could not be found. Even after executing all recovery behaviors");
+//				as_->setAborted(move_base_msgs::MoveBaseResult(), "Failed to find a valid plan. Even after executing recovery behaviors.");
+//			}
+//			else if(recovery_trigger_ == OSCILLATION_R)
+//			{
+//				ROS_ERROR("Aborting because the robot appears to be oscillating over and over. Even after executing all recovery behaviors");
+//				as_->setAborted(move_base_msgs::MoveBaseResult(), "Robot is oscillating. Even after executing recovery behaviors.");
+//			}
 
 			resetState();
 			ROS_DEBUG("\n=============================== End of executeCycle() =========================\n");
@@ -1587,5 +1589,110 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 		}
 		ofs_map.close();
   }
+
+  void MoveBase::recordMovebaseStatus( const geometry_msgs::PoseStamped& goal, const int status )
+  {
+		std::string str_localplan  = (boost::format("/media/data/results/move_base/local_plan%04d.txt") %mu_debug_cbidx  ).str() ;
+		std::string str_status  = (boost::format("/media/data/results/move_base/status%04d.txt") %mu_debug_cbidx ).str() ;
+		std::string str_localcm  = (boost::format("/media/data/results/move_base/local_cm%04d.txt") %mu_debug_cbidx ).str() ;
+		std::string str_globalcm  = (boost::format("/media/data/results/move_base/global_cm%04d.txt") %mu_debug_cbidx ).str() ;
+		std::string str_localcm_info  = (boost::format("/media/data/results/move_base/local_cm_info%04d.txt") %mu_debug_cbidx ).str() ;
+		std::string str_globalcm_info  = (boost::format("/media/data/results/move_base/global_cm_info%04d.txt") %mu_debug_cbidx ).str() ;
+		std::string str_robotpose  = (boost::format("/media/data/results/move_base/robotpose%04d.txt") %mu_debug_cbidx ).str() ;
+
+		mofs_status 		= std::ofstream(str_status);
+		mofs_robotpose 	= std::ofstream(str_robotpose) ;
+		mofs_localplan  	= std::ofstream(str_localplan);
+		mofs_localcm 	= std::ofstream(str_localcm) ;
+		mofs_globalcm 	= std::ofstream(str_globalcm);
+		mofs_localcm_info = std::ofstream(str_localcm_info);
+		mofs_globalcm_info = std::ofstream(str_globalcm_info);
+
+		costmap_2d::Costmap2D* poglobalcostmap = planner_costmap_ros_->getCostmap();
+		costmap_2d::Costmap2D* polocalcostmap  = controller_costmap_ros_->getCostmap();
+
+		int nwidth  = (int)poglobalcostmap->getSizeInCellsX() ;
+		int nheight = (int)poglobalcostmap->getSizeInCellsY() ;
+		float fox = (float)poglobalcostmap->getOriginX() ;
+		float foy = (float)poglobalcostmap->getOriginY() ;
+		float fres = (float)poglobalcostmap->getResolution() ;
+
+		// global map info
+		mofs_globalcm_info << nwidth << " " << nheight << " " << fox << " " << foy << " " << fres << std::endl;
+		mofs_globalcm_info.close();
+
+		// global cm
+		for( int ii=0; ii < nheight; ii++ )
+		{
+			for( int jj=0; jj < nwidth; jj++ )
+			{
+				uint32_t val = static_cast<uint32_t>( poglobalcostmap->getCost(jj,ii) ) ;
+				mofs_globalcm << val << " ";
+			}
+			mofs_globalcm << "\n";
+		}
+		mofs_globalcm.close();
+
+		// local map info
+		int local_nwidth  = (int)polocalcostmap->getSizeInCellsX() ;
+		int local_nheight = (int)polocalcostmap->getSizeInCellsY() ;
+		float local_fox = (float)polocalcostmap->getOriginX() ;
+		float local_foy = (float)polocalcostmap->getOriginY() ;
+		float local_fres = (float)polocalcostmap->getResolution() ;
+		mofs_localcm_info << local_nwidth << " " << local_nheight << " " << local_fox << " " << local_foy << " " << local_fres << std::endl;
+		mofs_localcm_info.close();
+
+		// local costmap
+		for( int ii=0; ii < local_nheight; ii++ )
+		{
+			for( int jj=0; jj < local_nwidth; jj++ )
+			{
+				uint32_t val = static_cast<uint32_t>( polocalcostmap->getCost(jj,ii) ) ;
+				mofs_localcm << val << " ";
+			}
+			mofs_localcm << "\n";
+		}
+		mofs_localcm.close();
+
+		geometry_msgs::PoseStamped global_pose, local_pose;
+		getRobotPose(global_pose, planner_costmap_ros_) ;
+		getRobotPose(local_pose, controller_costmap_ros_) ;
+		float wx_r = (float)global_pose.pose.position.x ;
+		float wy_r = (float)global_pose.pose.position.y ;
+		float wx_g = (float)goal.pose.position.x ;
+		float wy_g = (float)goal.pose.position.y ;
+		uint32_t mx_r, my_r, mx_g, my_g;
+//		poglobalcostmap->worldToMap(wx_r, wy_r, mx_r, my_r);
+//		poglobalcostmap->worldToMap(wx_g, wy_g, mx_g, my_g);
+
+		// cp rpose
+		mofs_robotpose << wx_g << " " << wy_g << " " << global_pose.pose.position.x << " " << global_pose.pose.position.y << " " <<
+		global_pose.pose.orientation.w << " " << global_pose.pose.orientation.x << " " << global_pose.pose.orientation.y << " " << global_pose.pose.orientation.z << "\n" <<
+
+		wx_g << " " << wy_g << " " << local_pose.pose.position.x << " " << local_pose.pose.position.y << " " <<
+		local_pose.pose.orientation.w << " " << local_pose.pose.orientation.x << " " << local_pose.pose.orientation.y << " " << local_pose.pose.orientation.z << std::endl;
+
+		mofs_robotpose.close();
+
+		// status
+		mofs_status << status << std::endl;
+		mofs_status.close();
+
+		// cp local plan
+		mofs_localplan << global_pose.pose.position.x << " " << global_pose.pose.position.y << std::endl;
+		for(int ii =0; ii < latest_plan_->size(); ii++ )
+		{
+			mofs_localplan << (*latest_plan_)[ii].pose.position.x << " " << (*latest_plan_)[ii].pose.position.y << std::endl;
+		}
+		mofs_localplan << goal.pose.position.x << " " << goal.pose.position.y << std::endl;
+		mofs_localplan << std::endl;
+		mofs_localplan.close();
+
+
+		// save robot pose and the goal
+		mu_debug_cbidx++;
+
+  }
+
 
 };

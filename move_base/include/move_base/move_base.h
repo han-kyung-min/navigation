@@ -338,7 +338,7 @@ namespace move_base {
 
 //    		ROS_WARN("mx my wx wy ox oy res: %d %d %f %f %f %f \n", mx, my, wx, wy, pocostmap->getOriginX(), pocostmap->getOriginY(), pocostmap->getResolution() );
 
-    		if (r2gdist_world < 2.0)
+    		if (r2gdist_world < 1.0)
     		{
 //				if( (c0 == 255 || c1 == 255 || c2 == 255 || c3 == 255 || c4 == 255 ||  c5 == 255 || c6 == 255 || c7 == 255 || c8 == 255 ) ) // UNKNOWN == 255
 //					return false ;
@@ -352,7 +352,7 @@ namespace move_base {
 //					);
 			   		//ROS_ERROR("\n %u %u %u \n %u %u %u \n %u %u %u \n", c0, c1, c2, c3, c4, c5, c6, c7, c8);
 
-					true;
+					return true;
 				}
     		}
 
@@ -366,6 +366,8 @@ namespace move_base {
       bool isDone(){ return isdone; };
       void ismappingdoneCB(const std_msgs::BoolPtr& ismappingdone) ;
       void saveMap( const std::string& infofilename, const std::string& mapfilename, const geometry_msgs::PoseStamped& goal );
+
+      void recordMovebaseStatus( const geometry_msgs::PoseStamped& goal, const int status );
 
   };
 };
