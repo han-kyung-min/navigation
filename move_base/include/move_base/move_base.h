@@ -73,21 +73,23 @@ namespace move_base {
     PLANNING,
     CONTROLLING,
     CLEARING,
-	ABORTING	// by hkm
+	ABORTING,	// by hkm
+	AGRESSIVE_CLEARING_ROTATION
   };
   static const char *movebase_str[] =
-          { "PLANNING", "CONTROLLING", "CLEARING", "ABORTING" };
+          { "PLANNING", "CONTROLLING", "CLEARING", "ABORTING", "AGRESSIVE_CLEARING_ROTATION" };
 
   enum RecoveryTrigger
   {
     PLANNING_R,
     CONTROLLING_R,
     OSCILLATION_R,
-	ABORTING_R	// by hkm
+	ABORTING_R,	// by hkm
+	AGRESSIVE_CLEARING_ROTATION_R // by hkm
   };
 
   static const char *recovery_trigger_str[] =
-          { "PLANNING_R", "CONTROLLING_R", "OSCILLATION_R", "ABORTING_R" };
+          { "PLANNING_R", "CONTROLLING_R", "OSCILLATION_R", "ABORTING_R", "AGRESSIVE_CLEARING_ROTATION_R" };
 
   /**
    * @class MoveBase
@@ -220,6 +222,7 @@ namespace move_base {
       bool shutdown_costmaps_, clearing_rotation_allowed_, recovery_behavior_enabled_;
       bool make_plan_clear_costmap_, make_plan_add_unreachable_goal_;
       bool isdone;
+      bool mb_last_move_succeeded ;
 
       int  max_plan_length_ ;
       double oscillation_timeout_, oscillation_distance_;

@@ -269,7 +269,7 @@ ROS_DEBUG("NavfnROS::makePlan() is called to find a plan from (%f %f) to the goa
     bool success = planner_->calcNavFnAstar();
     if( !success)
     {
-    	ROS_WARN("NavfnROS::makePlan() calcNavFnAstar() has failed \n");
+    	//ROS_WARN("NavfnROS::makePlan() calcNavFnAstar() has failed \n");
     	return false;
     }
     //bool success = planner_->calcNavFnDijkstra(true);
