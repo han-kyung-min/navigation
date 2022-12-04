@@ -58,7 +58,7 @@ namespace move_base {
     recovery_loader_("nav_core", "nav_core::RecoveryBehavior"),
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false), isdone(false),
-	mu_debug_cbidx(0), mu_debug_cycidx(0), mb_last_move_succeeded(true)
+	mu_debug_cbidx(0), mu_debug_cycidx(0), mb_last_move_succeeded(true), mf_tot_recovtime_sec( 0.0 )
   {
 
     as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base", boost::bind(&MoveBase::executeCb, this, _1), false);
@@ -830,7 +830,7 @@ ROS_DEBUG("\n-------------------------------------------------------------------
     last_valid_control_ = ros::Time::now();
     last_valid_plan_ = ros::Time::now();
 
-    if(mb_last_move_succeeded)
+    //if(mb_last_move_succeeded)
     	last_oscillation_reset_ = ros::Time::now();
     planning_retries_ = 0;
 
@@ -930,6 +930,7 @@ ROS_DEBUG("\n-------------------------------------------------------------------
       //if we're done, then we'll return from execute
       if(done)
       {
+    	  mu_debug_cycidx = 0;
         return;
       }
       //check if execution of the goal has completed in some way
@@ -965,6 +966,9 @@ ROS_DEBUG("\n-------------------------------------------------------------------
 
   bool MoveBase::executeCycle(geometry_msgs::PoseStamped& goal)
   {
+
+
+
 ROS_DEBUG("\n=============================================================================\n"
 		    "=============================== Begin executeCycle() ========================\n"
 		    "=============================================================================\n");
@@ -976,6 +980,44 @@ ROS_DEBUG("\n===================================================================
     geometry_msgs::PoseStamped global_pose ;
     getRobotPose(global_pose, planner_costmap_ros_);
     const geometry_msgs::PoseStamped& current_position = global_pose;
+
+
+    costmap_2d::Costmap2D* pcm2d = planner_costmap_ros_->getCostmap() ;
+  uint32_t uwidth  = pcm2d->getSizeInCellsX() ;
+  uint32_t uheight = pcm2d->getSizeInCellsY() ;
+  double fox = pcm2d->getOriginX() ;
+  double foy = pcm2d->getOriginY() ;
+  double fres = pcm2d->getResolution() ;
+
+  std::string strinfo 	= (boost::format("/media/data/results/move_base/mapinfo%04d.txt") % mu_debug_cycidx ).str() ;
+  std::string strcostmap = (boost::format("/media/data/results/move_base/costmap%04d.txt") % mu_debug_cycidx++ ).str() ;
+
+	std::ofstream ofs_info( strinfo );
+	std::ofstream ofs_map(strcostmap);
+
+	ofs_info << uwidth << " " << uheight << " " << fox << " " << foy << " " << fres << " " <<
+			global_pose.pose.position.x << " " << global_pose.pose.position.y << std::endl;
+
+  // show costmap
+
+	uint8_t* mapdata = pcm2d->getCharMap() ;
+
+	for( uint32_t ii=0; ii < uheight; ii++ )
+	{
+		for( uint32_t jj=0; jj < uwidth; jj++ )
+		{
+			uint32_t dataidx = ii * uwidth + jj ;
+			uint8_t val = mapdata[ dataidx ]  ;
+			ofs_map << static_cast<uint32_t>(val) << " ";
+		}
+		ofs_map << "\n";
+	}
+	ofs_map.close();
+
+
+
+
+
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 // check if the target has covered... ----------> early termination if so
@@ -1168,10 +1210,13 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 		recovery_behavior_enabled_	?"true":"false",
 		recovery_index_							   , 	recovery_behaviors_.size() );
 
+
 		//we'll invoke whatever recovery behavior we're currently on if they're enabled
 		//if(recovery_behavior_enabled_ && recovery_index_ < recovery_behaviors_.size()
 		if(recovery_behavior_enabled_  && recovery_index_ < recovery_behaviors_.size() ) //&& is_robot_stuck()) // kmHan
 		{
+ros::WallTime beginTime = ros::WallTime::now();
+
 			ROS_DEBUG(" Robot is stuck perhaps ... recovery_trigger_ / clearing_retries_ < %d %d > \n", recovery_trigger_, clearing_retries_);
 			ROS_DEBUG(" starting the recovery behavior (osc timeout/last reset  %f / %d)... \n", oscillation_timeout_ , last_oscillation_reset_.sec);
 			ROS_WARN(" Executing behavior %u of %zu", recovery_index_, recovery_behaviors_.size());
@@ -1192,6 +1237,11 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 			//update the index of the next recovery behavior that we'll try
 			recovery_index_++;
 //			clearing_retries_++;
+
+ros::WallTime endTime = ros::WallTime::now();
+mf_tot_recovtime_sec = mf_tot_recovtime_sec + (endTime - beginTime ).toNSec() * 1e-9;
+
+
 		}
 
 		else
@@ -1233,7 +1283,7 @@ ROS_DEBUG("@move_base::executeCycle()  recovery enabled: (%s), recovery_index : 
 
 			unreachable_frontier_pub_.publish( planner_goal_ ); 	// calls unreachablefrontierCallback() in autoexplorer node
 			//m_unreachable_goals.push_back( planner_goal_ );		// by hkm
-
+ROS_WARN("total recovery time spent so far: %f \n", mf_tot_recovtime_sec);
 			resetState();
 			ROS_DEBUG("\n=============================== End of executeCycle() =========================\n");
 			return true;

@@ -170,7 +170,8 @@ void ClearCostmapRecovery::clearMap(boost::shared_ptr<costmap_2d::CostmapLayer> 
   costmap->worldToMapNoBounds(start_point_x, start_point_y, start_x, start_y);
   costmap->worldToMapNoBounds(end_point_x, end_point_y, end_x, end_y);
 
-  costmap->clearArea(start_x, start_y, end_x, end_y, invert_area_to_clear_);
+//  costmap->clearArea(start_x, start_y, end_x, end_y, invert_area_to_clear_);
+  costmap->freeArea(start_x, start_y, end_x, end_y, invert_area_to_clear_);
 
   double ox = costmap->getOriginX(), oy = costmap->getOriginY();
   double width = costmap->getSizeInMetersX(), height = costmap->getSizeInMetersY();

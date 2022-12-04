@@ -104,7 +104,6 @@ void StaticLayer::onInitialize()
     {
       ROS_INFO("Subscribing to updates");
       map_update_sub_ = g_nh.subscribe(map_topic + "_updates", 10, &StaticLayer::incomingUpdate, this);
-
     }
   }
   else
@@ -121,6 +120,7 @@ void StaticLayer::onInitialize()
   dynamic_reconfigure::Server<costmap_2d::GenericPluginConfig>::CallbackType cb = boost::bind(
       &StaticLayer::reconfigureCB, this, _1, _2);
   dsrv_->setCallback(cb);
+
 }
 
 void StaticLayer::reconfigureCB(costmap_2d::GenericPluginConfig &config, uint32_t level)
@@ -271,7 +271,8 @@ void StaticLayer::updateBounds(double robot_x, double robot_y, double robot_yaw,
                                double* max_x, double* max_y)
 {
 
-  if( !layered_costmap_->isRolling() ){
+  if( !layered_costmap_->isRolling() )
+  {
     if (!map_received_ || !(has_updated_data_ || has_extra_bounds_))
       return;
   }

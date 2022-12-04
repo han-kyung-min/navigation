@@ -517,6 +517,8 @@ void Costmap2DROS::start()
     for (vector<boost::shared_ptr<Layer> >::iterator plugin = plugins->begin(); plugin != plugins->end();
         ++plugin)
     {
+    	ROS_INFO("Activating %s \n", (*plugin)->getName() );
+
       (*plugin)->activate();
     }
     stopped_ = false;

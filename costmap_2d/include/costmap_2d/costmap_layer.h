@@ -60,6 +60,8 @@ public:
 
   virtual void clearArea(int start_x, int start_y, int end_x, int end_y, bool invert_area=false);
 
+  virtual void freeArea(int start_x, int start_y, int end_x, int end_y, bool invert_area=false);
+
   /**
    * If an external source changes values in the costmap,
    * it should call this method with the area that it changed

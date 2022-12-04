@@ -278,6 +278,8 @@ namespace move_base {
       std::ofstream mofs_localcm_info ;
       std::ofstream mofs_globalcm_info ;
 
+      double mf_tot_recovtime_sec ;
+
     public:
 
 //      inline bool planner_goal_equals_to_prevgoal( )
