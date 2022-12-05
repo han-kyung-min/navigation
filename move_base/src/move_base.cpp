@@ -982,37 +982,37 @@ ROS_DEBUG("\n===================================================================
     const geometry_msgs::PoseStamped& current_position = global_pose;
 
 
-    costmap_2d::Costmap2D* pcm2d = planner_costmap_ros_->getCostmap() ;
-  uint32_t uwidth  = pcm2d->getSizeInCellsX() ;
-  uint32_t uheight = pcm2d->getSizeInCellsY() ;
-  double fox = pcm2d->getOriginX() ;
-  double foy = pcm2d->getOriginY() ;
-  double fres = pcm2d->getResolution() ;
-
-  std::string strinfo 	= (boost::format("/media/data/results/move_base/mapinfo%04d.txt") % mu_debug_cycidx ).str() ;
-  std::string strcostmap = (boost::format("/media/data/results/move_base/costmap%04d.txt") % mu_debug_cycidx++ ).str() ;
-
-	std::ofstream ofs_info( strinfo );
-	std::ofstream ofs_map(strcostmap);
-
-	ofs_info << uwidth << " " << uheight << " " << fox << " " << foy << " " << fres << " " <<
-			global_pose.pose.position.x << " " << global_pose.pose.position.y << std::endl;
-
-  // show costmap
-
-	uint8_t* mapdata = pcm2d->getCharMap() ;
-
-	for( uint32_t ii=0; ii < uheight; ii++ )
-	{
-		for( uint32_t jj=0; jj < uwidth; jj++ )
-		{
-			uint32_t dataidx = ii * uwidth + jj ;
-			uint8_t val = mapdata[ dataidx ]  ;
-			ofs_map << static_cast<uint32_t>(val) << " ";
-		}
-		ofs_map << "\n";
-	}
-	ofs_map.close();
+//    costmap_2d::Costmap2D* pcm2d = planner_costmap_ros_->getCostmap() ;
+//  uint32_t uwidth  = pcm2d->getSizeInCellsX() ;
+//  uint32_t uheight = pcm2d->getSizeInCellsY() ;
+//  double fox = pcm2d->getOriginX() ;
+//  double foy = pcm2d->getOriginY() ;
+//  double fres = pcm2d->getResolution() ;
+//
+//  std::string strinfo 	= (boost::format("/media/data/results/move_base/mapinfo%04d.txt") % mu_debug_cycidx ).str() ;
+//  std::string strcostmap = (boost::format("/media/data/results/move_base/costmap%04d.txt") % mu_debug_cycidx++ ).str() ;
+//
+//	std::ofstream ofs_info( strinfo );
+//	std::ofstream ofs_map(strcostmap);
+//
+//	ofs_info << uwidth << " " << uheight << " " << fox << " " << foy << " " << fres << " " <<
+//			global_pose.pose.position.x << " " << global_pose.pose.position.y << std::endl;
+//
+//  // show costmap
+//
+//	uint8_t* mapdata = pcm2d->getCharMap() ;
+//
+//	for( uint32_t ii=0; ii < uheight; ii++ )
+//	{
+//		for( uint32_t jj=0; jj < uwidth; jj++ )
+//		{
+//			uint32_t dataidx = ii * uwidth + jj ;
+//			uint8_t val = mapdata[ dataidx ]  ;
+//			ofs_map << static_cast<uint32_t>(val) << " ";
+//		}
+//		ofs_map << "\n";
+//	}
+//	ofs_map.close();
 
 
 
